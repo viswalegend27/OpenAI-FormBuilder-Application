@@ -27,3 +27,6 @@ local_settings.py
 
 # My Notes
 /notes.txt
+
+#vscode files
+/.vscode
