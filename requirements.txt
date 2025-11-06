@@ -1,3 +1,5 @@
 Django>=5.1,<6
 python-dotenv
 psycopg2-binary
+requests
+requests-toolbelt
