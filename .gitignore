@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+
+# Environments
+.venv/
+.env
+.env.*
+
+# Django
+*.log
+media/
+staticfiles/
+local_settings.py
+
+# SQLite database
+/db.sqlite3
+
+# VS Code
+.vscode/*
+!.vscode/launch.json
+
+# My Notes
+/notes.txt
