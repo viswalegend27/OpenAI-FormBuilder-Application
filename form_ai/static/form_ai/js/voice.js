@@ -1,3 +1,4 @@
+// The ICE gathering is done so that offer SDP includes our best network
 function waitForIceGathering(pc, timeoutMs = 3000) {
     // Resolve when ICE gathering completes or times out
     return new Promise((resolve) => {
@@ -89,7 +90,7 @@ async function startVoice() {
 
         // Send local SDP to OpenAI realtime endpoint using ephemeral key
         statusEl.textContent = "Exchanging SDP...";
-        const model = sess?.model || "gpt-4o-realtime-preview-2024-10-01";
+        const model = sess?.model;
         console.log("📡 Using model:", model);
 
         const oaResp = await fetch(`https://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`, {
