@@ -1,8 +1,8 @@
-import os
 import logging
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from .helper.views_helper import AppError, json_ok, json_fail, require_env, post_json
+from . import constants as C
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +19,6 @@ def create_realtime_session(request):
 
         # Get API key and config
         api_key = require_env("OPENAI_API_KEY")
-        model = os.getenv("OPENAI_REALTIME_MODEL")
-        voice = os.getenv("OPENAI_REALTIME_VOICE")
 
         # OpenAI Realtime session endpoint
         url = "https://api.openai.com/v1/realtime/sessions"
@@ -30,7 +28,7 @@ def create_realtime_session(request):
         }
 
         # Defining my payload logic
-        payload = {"model": model, "voice": voice}
+        payload = C.get_session_payload()
         # Creating my session along with the payload.
         data = post_json(url, headers, payload, timeout=20)
 
