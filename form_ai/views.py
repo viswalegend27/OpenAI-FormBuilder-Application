@@ -8,7 +8,7 @@ from django.views.decorators.csrf import csrf_exempt
 logger = logging.getLogger(__name__)
 
 def voice_page(request):
-    # Render the voice page template
+    # Renders my html page. 
     return render(request, "form_ai/voice.html")
 
 @csrf_exempt
