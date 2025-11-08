@@ -1,19 +1,19 @@
 // The ICE gathering is done so that offer SDP includes our best network
 function waitForIceGathering(pc, timeoutMs = 3000) {
+// An promise function declared
 return new Promise((resolve) => {
     if (pc.iceGatheringState === "complete") {
     console.log("✅ ICE already complete");
     return resolve();
     }
-
+    // Ice gathering process
     const onStateChange = () => {
     console.log("🧊 ICE gathering:", pc.iceGatheringState);
     if (pc.iceGatheringState === "complete") {
         pc.removeEventListener("icegatheringstatechange", onStateChange);
         clearTimeout(timer);
         resolve();
-    }
-    };
+    }};
 
     const timer = setTimeout(() => {
     console.warn("⏱️ ICE gathering timeout");
@@ -22,14 +22,14 @@ return new Promise((resolve) => {
     }, timeoutMs);
 
     pc.addEventListener("icegatheringstatechange", onStateChange);
-    }
-    );
+    });
 }
 
 async function startVoice() {
+    // Obtaining my frontend elements.
     const statusEl = document.getElementById("status");
     const remoteEl = document.getElementById("remote");
-
+    // Starting my voice assistant application.
     try {
     // Request microphone access
     statusEl.textContent = "Requesting microphone...";
@@ -42,37 +42,30 @@ async function startVoice() {
         iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
 
-    // ⚡ CRITICAL: Create data channel BEFORE creating offer
+    // Creating data channel BEFORE creating offer
     const dc = pc.createDataChannel("oai-events");
     let sessionCreated = false;
 
     // Set up data channel event handlers
-    dc.addEventListener("open", () => {
-        console.log("📨 Data channel opened");
-    });
-
-    dc.addEventListener("error", (e) => {
-        console.error("❌ Data channel error:", e);
-    });
+    dc.addEventListener("open", () => {console.log("📨 Data channel opened");});
+    dc.addEventListener("error", (e) => {console.error("❌ Data channel error:", e);});
 
     dc.addEventListener("message", (e) => {
         try {
         const msg = JSON.parse(e.data);
         console.log("📩 Received event:", msg.type);
 
-        // ⚡ CRITICAL: Wait for session.created event, THEN trigger response
+        // Wait for session.created event, THEN trigger response
         if (msg.type === "session.created" && !sessionCreated) {
         sessionCreated = true;
-        console.log("✅ Session created, triggering initial response...");
+        console.log("✅ Session created..");
 
           // Now trigger the AI to speak first
-        const responseCreate = {
-            type: "response.create",
-        };
+        const responseCreate = {type: "response.create",};
 
         dc.send(JSON.stringify(responseCreate));
         console.log("📤 Sent response.create to trigger greeting");
-        statusEl.textContent = "Connected! Tyler should greet you now...";
+        statusEl.textContent = "Connected";
         }
 
         // Log other events for debugging (optional)
@@ -81,10 +74,10 @@ async function startVoice() {
         }
     } catch (err) {
         console.warn("Non-JSON message:", e.data);
-    }
-    });
+    }});
 
     // Attach remote audio when received
+    // Playing my audio when track from ai is recieved successfully.
     pc.addEventListener("track", (ev) => {
     console.log("🎵 Remote track received:", ev.track.kind);
     if (!remoteEl.srcObject) {
@@ -109,9 +102,8 @@ async function startVoice() {
             { once: true },
         );
         });
-    }
-    });
-
+    }});
+    // # ----------- MY DATABASE PROCESS ----------- #
     // Log ICE/connection state changes
     pc.addEventListener("iceconnectionstatechange", () => {
     console.log("🧊 ICE connection state:", pc.iceConnectionState);
@@ -134,6 +126,7 @@ async function startVoice() {
 
     // Fetch ephemeral session from your server
     statusEl.textContent = "Getting session...";
+    // My session call
     const sessResp = await fetch("/api/session");
     if (!sessResp.ok) {
     const errText = await sessResp.text();
@@ -149,11 +142,11 @@ async function startVoice() {
     console.error("❌ Session response:", sess);
     throw new Error("No ephemeral key in session response");
     }
-
+    
     // Send local SDP to OpenAI realtime endpoint
     statusEl.textContent = "Exchanging SDP...";
     const model = sess?.model;
-    console.log("📡 Using model:", model);
+    console.log("📡 Using model:", model)
 
     const oaResp = await fetch(
         `https://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`,
