@@ -29,6 +29,19 @@ async function startVoice() {
     // Obtaining my frontend elements.
     const statusEl = document.getElementById("status");
     const remoteEl = document.getElementById("remote");
+    const startBtn = document.getElementById("start");
+    const stopBtn = document.getElementById("stop");
+    const userTranscriptEl = document.getElementById("userTranscript");
+    const aiTranscriptEl = document.getElementById("aiTranscript");
+
+    // Helpers for appending transcript text
+    const append = (el, text) => {
+        if (!el) return;
+        if (el.classList && el.classList.contains("empty")) el.classList.remove("empty");
+        el.textContent += (el.textContent ? "\n" : "") + text;
+        el.scrollTop = el.scrollHeight;
+    };
+    let aiStreaming = "";
     // Starting my voice assistant application.
     try {
     // Request microphone access
@@ -47,7 +60,11 @@ async function startVoice() {
     let sessionCreated = false;
 
     // Set up data channel event handlers
-    dc.addEventListener("open", () => {console.log("📨 Data channel opened");});
+    dc.addEventListener("open", () => {
+        console.log("📨 Data channel opened");
+        // Enable stop button when channel is ready
+        if (stopBtn) stopBtn.disabled = false;
+    });
     dc.addEventListener("error", (e) => {console.error("❌ Data channel error:", e);});
 
     dc.addEventListener("message", (e) => {
@@ -66,6 +83,43 @@ async function startVoice() {
         dc.send(JSON.stringify(responseCreate));
         console.log("📤 Sent response.create to trigger greeting");
         statusEl.textContent = "Connected";
+        }
+
+        // Append user transcript when OpenAI finalizes it
+        if (msg.type === "conversation.item.input_audio_transcription.completed") {
+            const t = msg.transcript || "";
+            if (t) append(userTranscriptEl, `You: ${t}`);
+        }
+
+        // Stream assistant transcript deltas
+        if (msg.type === "response.audio_transcript.delta") {
+            aiStreaming += (msg.delta || "");
+            if (aiStreaming) {
+                const lines = (aiTranscriptEl?.textContent || "").split("\n").filter(Boolean);
+                if (lines.length && lines[lines.length - 1].startsWith("Assistant: ")) {
+                    lines[lines.length - 1] = "Assistant: " + aiStreaming;
+                    aiTranscriptEl.textContent = lines.join("\n");
+                    aiTranscriptEl.scrollTop = aiTranscriptEl.scrollHeight;
+                } else {
+                    append(aiTranscriptEl, "Assistant: " + aiStreaming);
+                }
+            }
+        }
+
+        // Finalize assistant transcript line
+        if (msg.type === "response.audio_transcript.done") {
+            const finalText = (msg.transcript || aiStreaming || "").trim();
+            if (finalText) {
+                const lines = (aiTranscriptEl?.textContent || "").split("\n").filter(Boolean);
+                if (lines.length && lines[lines.length - 1].startsWith("Assistant: ")) {
+                    lines[lines.length - 1] = "Assistant: " + finalText;
+                    aiTranscriptEl.textContent = lines.join("\n");
+                    aiTranscriptEl.scrollTop = aiTranscriptEl.scrollHeight;
+                } else {
+                    append(aiTranscriptEl, "Assistant: " + finalText);
+                }
+            }
+            aiStreaming = "";
         }
 
         // Log other events for debugging (optional)
@@ -142,7 +196,7 @@ async function startVoice() {
     console.error("❌ Session response:", sess);
     throw new Error("No ephemeral key in session response");
     }
-    
+
     // Send local SDP to OpenAI realtime endpoint
     statusEl.textContent = "Exchanging SDP...";
     const model = sess?.model;
@@ -172,7 +226,7 @@ async function startVoice() {
     await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
 
     console.log("✅ Remote description set successfully");
-    statusEl.textContent = "Connecting...";
+    statusEl.textContent = "Connected";
     } catch (err) {
     console.error("💥 Error:", err);
     statusEl.textContent = "Error: " + err.message;
@@ -180,3 +234,15 @@ async function startVoice() {
 }
 
 document.getElementById("start")?.addEventListener("click", startVoice);
+
+// Optional: stop/cleanup handler
+(() => {
+    const stopBtn = document.getElementById("stop");
+    if (!stopBtn) return;
+    if (stopBtn._wired) return;
+    stopBtn._wired = true;
+    stopBtn.addEventListener("click", () => {
+        // Rely on page reload or future stateful cleanup as needed
+        try { window.location.reload(); } catch {}
+    });
+})();

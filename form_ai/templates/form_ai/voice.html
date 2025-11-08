@@ -7,11 +7,33 @@
     <link rel="stylesheet" href="{% static 'form_ai/css/voice.css' %}">
 </head>
 <body>
-    <h1>OpenAI Realtime Form Builder</h1>
-    <button id="start">Start Voice Session</button>
-    <p id="status">Click "Start Voice Session" to begin</p>
-    <audio id="remote" autoplay></audio>
-    
+    <header class="header">
+        <h1>OpenAI Realtime Form Builder</h1>
+        <div class="controls">
+            <button id="start">Start</button>
+            <button id="stop" disabled>Stop</button>
+            <span id="status">Click “Start” to begin</span>
+        </div>
+    </header>
+
+    <main class="content">
+        <section class="transcripts">
+            <div class="panel">
+                <h2>You</h2>
+                <pre id="userTranscript" class="transcript empty"></pre>
+            </div>
+            <div class="panel">
+                <h2>Assistant</h2>
+                <pre id="aiTranscript" class="transcript empty"></pre>
+            </div>
+        </section>
+        <section class="audio">
+            <audio id="remote" autoplay playsinline></audio>
+        </section>
+    </main>
+
+    <div id="toast-message" class="toast" role="status" aria-live="polite"></div>
+
     <script src="{% static 'form_ai/js/voice.js' %}"></script>
 </body>
 </html>
