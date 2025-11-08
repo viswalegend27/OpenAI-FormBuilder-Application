@@ -1,9 +1,10 @@
 import os
+import logging
 from pathlib import Path
 
 OPENAI_BETA_HEADER_VALUE = "realtime=v1"
 
-# Resolve path to the Markdown instructions file (same app folder)
+# Setting an variable to point towards the ai_instructions.md
 _INSTRUCTIONS_MD = Path(__file__).resolve().parent / "ai_instructions.md"
 
 def _float_env(name: str, default: float = 0.6) -> float:
@@ -15,29 +16,14 @@ def _float_env(name: str, default: float = 0.6) -> float:
 def _read_instructions_md() -> str:
     try:
         text = _INSTRUCTIONS_MD.read_text(encoding="utf-8").strip()
-        return text if text else ""
-    except Exception:
-        return ""
+        return text or "Instruction file is empty."
+    except Exception as e:
+        logging.warning("Failed to read instructions: %s", e)
+        return f"Error: Failed to read instructions ({e})"
 
 def get_persona() -> str:
-    # Prefer Markdown file over any env-based text
-    md = _read_instructions_md()
-    if md:
+    if md := _read_instructions_md():
         return md
-
-    # Fallback: composed concise persona
-    ai_name = "Tyler"
-    role = "Techjays company intern hiring manager"
-    domain = "applicant skill inquiries and form building based on given instructions"
-
-    lines = [
-        f"You are {ai_name}, a {role}.",
-        f"Your goal is to guide users through {domain}.",
-        "Ask one short question at a time, confirm details, and avoid long monologues.",
-        "Keep answers under two sentences unless clarification is needed.",
-        "Be polite, on-topic, and summarize key choices when appropriate.",
-    ]
-    return " ".join(lines)
 
 def get_session_payload() -> dict:
     return {
