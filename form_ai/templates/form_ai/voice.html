@@ -8,32 +8,36 @@
 <link rel="stylesheet" href="{% static 'form_ai/css/voice.css' %}">
 </head>
 <body>
-<header class="header">
+    <header class="header">
     <h1>OpenAI Realtime Form Builder</h1>
-    <div class="controls">
-    <button id="start">Start</button>
-    <button id="stop" disabled>Stop</button>
-    <span id="status">Click “Start” to begin</span>
-    </div>
-</header>
+        <div class="controls">
+        <button id="start">Start</button>
+        <button id="stop" disabled>Stop</button>
+        <span id="status">Click “Start” to begin</span>
+        </div>
+    </header>
 
-<main class="content">
-    <!-- single conversation panel -->
-    <section class="conversation-panel">
-    <div class="panel">
+<main class="layout">
+    <!-- left area (optional content / placeholder) -->
+    <section class="workspace" aria-hidden="true">
+    <!-- You can put other UI here (preview, forms, docs). Kept empty intentionally. -->
+    </section>
+
+    <!-- chat area fixed to right -->
+    <aside class="chat-wrapper" aria-label="Conversation panel">
+        <div class="panel">
         <h2>Conversation</h2>
-        <!-- conversation container - messages appended here -->
         <div id="conversation" class="conversation empty" role="log" aria-live="polite"></div>
-    </div>
-    </section>
 
-    <section class="audio">
-    <audio id="remote" autoplay playsinline></audio>
-    </section>
+        <div class="audio">
+            <audio id="remote" autoplay playsinline></audio>
+        </div>
+    </div>
+    </aside>
 </main>
 
 <div id="toast-message" class="toast" role="status" aria-live="polite"></div>
-
 <script src="{% static 'form_ai/js/voice.js' %}"></script>
+
 </body>
 </html>

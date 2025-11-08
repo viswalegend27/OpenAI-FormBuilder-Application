@@ -138,7 +138,7 @@ try {
         return;
         }
 
-        // assistant transcript deltas (stream) <-- My beta transcript.
+        // assistant transcript deltas (stream) <-- My beta
     if (msg.type === "response.audio_transcript.delta") {
     aiStreaming += (msg.delta || "");
     if (!aiStreaming) return;
