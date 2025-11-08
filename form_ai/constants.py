@@ -1,11 +1,11 @@
 import os
 import logging
-from pathlib import Path
+from django.conf import settings
 
 OPENAI_BETA_HEADER_VALUE = "realtime=v1"
 
 # Setting an variable to point towards the ai_instructions.md
-_INSTRUCTIONS_MD = Path(__file__).resolve().parent / "ai_instructions.md"
+_INSTRUCTIONS_MD = settings.AI_INSTRUCTIONS_PATH
 
 def _float_env(name: str, default: float = 0.6) -> float:
     try:

@@ -12,6 +12,9 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['localhost','127.0.0.1',]
 
+# My instructions path
+AI_INSTRUCTIONS_PATH = Path(BASE_DIR) / "form_ai" / "ai_instructions.md"
+
 # Application definition
 
 INSTALLED_APPS = [
