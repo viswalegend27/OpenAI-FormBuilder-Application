@@ -39,8 +39,17 @@ async function startVoice() {
     setTimeout(() => t.classList.remove("show"), ms);
     }
 
+// Helpers to show toast
+const toast = (msg, ms = 3000) => {
+    const t = document.getElementById("toast-message");
+    if (!t) return;
+    t.textContent = msg;
+    t.classList.add("show");
+    setTimeout(() => t.classList.remove("show"), ms);
+};
+
 // Create and append message element; returns the message element
-    function appendMessage(role, text = "", opts = {}) {
+const appendMessage = (role, text = "", opts = {}) => {
     if (!convEl) return null;
     if (convEl.classList.contains("empty")) convEl.classList.remove("empty");
 
@@ -64,25 +73,26 @@ async function startVoice() {
     convEl.scrollTop = convEl.scrollHeight;
 
     return { msgEl: msg, bubbleEl: bubble, metaEl: meta };
-    }
+};
 
 // Utility to update last assistant message (for streaming)
-    function updateStreamingAssistant(elObj, streamingText) {
-    if (!elObj) return;
-    elObj.bubbleEl.textContent = streamingText;
-    if (!elObj.msgEl.classList.contains("streaming")) {
-        elObj.msgEl.classList.add("streaming");
-    }
-    elObj.msgEl.scrollIntoView({ behavior: "smooth", block: "end" });
-    }
+    const updateStreamingAssistant = (elObj, streamingText) => {
+        if (!elObj) return;
+        elObj.bubbleEl.textContent = streamingText;
+        if (!elObj.msgEl.classList.contains("streaming")) {
+            elObj.msgEl.classList.add("streaming");
+        }
+        
+        elObj.msgEl.scrollIntoView({ behavior: "smooth", block: "end" });
+    };
 
 // finalize message (remove streaming class)
-    function finalizeMessage(elObj, finalText) {
-    if (!elObj) return;
-    elObj.bubbleEl.textContent = finalText;
-    elObj.msgEl.classList.remove("streaming");
-    elObj.msgEl.scrollIntoView({ behavior: "smooth", block: "end" });
-    }
+    const finalizeMessage = (elObj, finalText) => {
+        if (!elObj) return;
+        elObj.bubbleEl.textContent = finalText;
+        elObj.msgEl.classList.remove("streaming");
+        elObj.msgEl.scrollIntoView({ behavior: "smooth", block: "end" });
+    };
 
     let currentAssistant = null; // holds object returned by appendMessage for streaming assistant
     let aiStreaming = "";
