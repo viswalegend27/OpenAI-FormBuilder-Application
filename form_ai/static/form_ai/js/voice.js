@@ -24,20 +24,12 @@ function waitForIceGathering(pc, timeoutMs = 3000) {
 });
 }
 
+// My voice assistant initiator function.
 async function startVoice() {
     const statusEl = document.getElementById("status");
     const remoteEl = document.getElementById("remote");
     const stopBtn = document.getElementById("stop");
     const convEl = document.getElementById("conversation");
-
-// Helpers to show toast
-    function toast(msg, ms = 3000) {
-    const t = document.getElementById("toast-message");
-    if (!t) return;
-    t.textContent = msg;
-    t.classList.add("show");
-    setTimeout(() => t.classList.remove("show"), ms);
-    }
 
 // Helpers to show toast
 const toast = (msg, ms = 3000) => {
