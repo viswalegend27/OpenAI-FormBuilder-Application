@@ -1,257 +1,188 @@
-function waitForIceGathering(pc, timeoutMs = 3000) {
-    // ---- Creating promise to resolve ICE Gathering ----
-    return new Promise((resolve) => {
-    if (pc.iceGatheringState === "complete") {
-    console.log("✅ ICE already complete");
-    return resolve();
+// wait for ICE to finish or timeout
+async function waitForIceGathering(pc, timeout = 3000) {
+    if (pc.iceGatheringState === "complete") return;
+    return new Promise((res) => {
+    const done = () => { pc.removeEventListener("icegatheringstatechange", done); clearTimeout(timer); res(); };
+    const timer = setTimeout(() => { pc.removeEventListener("icegatheringstatechange", done); res(); }, timeout);
+    pc.addEventListener("icegatheringstatechange", done);
+});}
+
+window.currentSessionId = null;
+window._conversationSaved = false; 
+/*-------------------------
+Minimal conversation memory
+------------------------- */
+const conversationMessages = []; 
+const pushMessage = (role, text) => conversationMessages.push({ role, content: text, ts: new Date().toISOString() });
+const updateLastAssistant = (text) => {
+    for (let i = conversationMessages.length - 1; i >= 0; i--) {
+    if (conversationMessages[i].role === "assistant") { conversationMessages[i].content = text; conversationMessages[i].ts = new Date().toISOString(); return; }
     }
-    // --- Initiating an on-state Change ---
-    const onStateChange = () => {
-    if (pc.iceGatheringState === "complete") {
-        pc.removeEventListener("icegatheringstatechange", onStateChange);
-        clearTimeout(timer);
-        resolve();
-    }
-    };
+pushMessage("assistant", text);};
 
-    const timer = setTimeout(() => {
-    console.warn("⏱️ ICE gathering timeout");
-    pc.removeEventListener("icegatheringstatechange", onStateChange);
-    resolve();
-    }, timeoutMs);
-
-    pc.addEventListener("icegatheringstatechange", onStateChange);
-});
-}
-
-// My voice assistant initiator function.
-async function startVoice() {
-    const statusEl = document.getElementById("status");
-    const remoteEl = document.getElementById("remote");
-    const stopBtn = document.getElementById("stop");
-    const convEl = document.getElementById("conversation");
-
-// Helpers to show toast
-const toast = (msg, ms = 3000) => {
-    const t = document.getElementById("toast-message");
-    if (!t) return;
+/*-------------------------
+    Compact UI helpers
+------------------------- */
+const $ = (id) => document.getElementById(id);
+let toastTimer;
+function toast(msg, ms = 3000) {
+    const t = $("toast-message");
+    if (!t) return Promise.resolve();
     t.textContent = msg;
     t.classList.add("show");
-    setTimeout(() => t.classList.remove("show"), ms);
+    clearTimeout(toastTimer);
+    return new Promise((resolve) => {
+        if (ms <= 0) return resolve();
+        toastTimer = setTimeout(() => {
+        t.classList.remove("show");
+        toastTimer = null;
+        resolve();
+    }, ms);
+});}
+
+const appendMessageToDom = (role, text = "") => {
+    const conv = $("conversation"); if (!conv) return null;
+    if (conv.classList.contains("empty")) conv.classList.remove("empty");
+        const msg = document.createElement("div"); msg.className = "message " + (role === "user" ? "user" : "assistant");
+        const bubble = document.createElement("div"); bubble.className = "bubble"; bubble.textContent = text;
+        const meta = document.createElement("div"); meta.className = "meta"; meta.textContent = role === "user" ? "You" : "Assistant";
+    msg.append(bubble, meta); conv.appendChild(msg); conv.scrollTop = conv.scrollHeight;
+    // Fixing roles
+    role === "assistant" ? pushMessage("assistant", text) : pushMessage("user", text);
+    return { msgEl: msg, bubbleEl: bubble };
 };
 
-// Create and append message element; returns the message element
-const appendMessage = (role, text = "", opts = {}) => {
-    if (!convEl) return null;
-    if (convEl.classList.contains("empty")) convEl.classList.remove("empty");
+// Streaming my transcript
+const updateStreaming = (el, text) => 
+    { if (!el) return; el.bubbleEl.textContent = text; 
+    el.msgEl.classList.add("streaming"); updateLastAssistant(text); 
+    el.msgEl.scrollIntoView({ block: "end", behavior: "smooth" }); };
 
-    const msg = document.createElement("div");
-    msg.className = "message " + (role === "user" ? "user" : "assistant");
-    if (opts.id) msg.dataset.msgId = opts.id;
+// Finalizing the transcript
+const finalize = (el, text) => { if (!el) return; el.bubbleEl.textContent = text; 
+    el.msgEl.classList.remove("streaming"); updateLastAssistant(text); 
+    el.msgEl.scrollIntoView({ block: "end", behavior: "smooth" }); };
 
-    const bubble = document.createElement("div");
-    bubble.className = "bubble";
-    bubble.textContent = text || "";
+/*-------------------------
+    Main flow: startVoice
+------------------------- */
+async function startVoice() {
+    const status = $("status"), remote = $("remote"), stopBtn = $("stop");
+    let currentAssistant = null, aiStreaming = "", sessionCreated = false;
 
-    // small meta (role + optional time)
-    const meta = document.createElement("div");
-    meta.className = "meta";
-    meta.textContent = `${role === "user" ? "You" : "Assistant"}`;
-
-    msg.appendChild(bubble);
-    msg.appendChild(meta);
-
-    convEl.appendChild(msg);
-    convEl.scrollTop = convEl.scrollHeight;
-
-    return { msgEl: msg, bubbleEl: bubble, metaEl: meta };
-};
-
-// Utility to update last assistant message (for streaming)
-    const updateStreamingAssistant = (elObj, streamingText) => {
-        if (!elObj) return;
-        elObj.bubbleEl.textContent = streamingText;
-        if (!elObj.msgEl.classList.contains("streaming")) {
-            elObj.msgEl.classList.add("streaming");
-        }
-        
-        elObj.msgEl.scrollIntoView({ behavior: "smooth", block: "end" });
-    };
-
-// finalize message (remove streaming class)
-    const finalizeMessage = (elObj, finalText) => {
-        if (!elObj) return;
-        elObj.bubbleEl.textContent = finalText;
-        elObj.msgEl.classList.remove("streaming");
-        elObj.msgEl.scrollIntoView({ behavior: "smooth", block: "end" });
-    };
-
-    let currentAssistant = null; // holds object returned by appendMessage for streaming assistant
-    let aiStreaming = "";
-
-try {
-    statusEl.textContent = "Requesting microphone...";
-    // --- Microphone access ---
-    const mic = await navigator.mediaDevices.getUserMedia({audio: { echoCancellation: true, noiseSuppression:true },});
-    
-    // --- Setting up my WebRTC connection ---
-    const pc = new RTCPeerConnection({iceServers: [{ urls: "stun:stun.l.google.com:19302" }],});
-
-    // --- Data-channel connectivity ---
-    const dc = pc.createDataChannel("oai-events");
-    let sessionCreated = false;
-
-    dc.addEventListener("open", () => {
-    console.log("📨 Data channel opened");
-    if (stopBtn) stopBtn.disabled = false;
-    });
-    
-    dc.addEventListener("error", (e) => console.error("❌ Data channel error:", e));
-
-    dc.addEventListener("message", (e) => {
     try {
+    status && (status.textContent = "Requesting mic...");
+    const mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+
+    const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+    const dc = pc.createDataChannel("oai-events");
+
+    dc.addEventListener("open", () => { stopBtn && (stopBtn.disabled = false); });
+    dc.addEventListener("error", (e) => console.error("DataChannel err:", e));
+    dc.addEventListener("message", (e) => {
+        try {
         const msg = JSON.parse(e.data);
-        if (msg?.type && !String(msg.type).includes("audio")) {
-        console.log("📩 Event:", msg.type);
-        }
+        // non-audio events (debug)
+        if (msg?.type && !String(msg.type).includes("audio")) console.log("Event:", msg.type);
 
-        // session.created -> trigger assistant greeting
         if (msg.type === "session.created" && !sessionCreated) {
-        sessionCreated = true;
-        console.log("✅ Session created..");
-        // trigger a response if desired (your original behavior)
-        const responseCreate = { type: "response.create" };
-        dc.send(JSON.stringify(responseCreate));
-        console.log("📤 Sent response.create to trigger greeting");
-        statusEl.textContent = "Connected";
+            sessionCreated = true;
+          dc.send(JSON.stringify({ type: "response.create" })); // Here's where greeting is triggered
+            status && (status.textContent = "Connected");
         }
 
-        // user final transcript.
         if (msg.type === "conversation.item.input_audio_transcription.completed") {
-        const t = msg.transcript || "";
-        if (t) {appendMessage("user", t);}
+            const t = msg.transcript || ""; if (t) appendMessageToDom("user", t);
         }
 
-        // assistant response start 
-        if (msg.type === "response.created") {
-        // initialize streaming assistant message
-        aiStreaming = "";
-        currentAssistant = appendMessage("assistant", ""); // Initial bubble
-        return;
+        if (msg.type === "response.created") { aiStreaming = ""; currentAssistant = appendMessageToDom("assistant", ""); return; }
+        if (msg.type === "response.audio_transcript.delta") { aiStreaming += msg.delta || ""; if (aiStreaming) updateStreaming(currentAssistant, aiStreaming); return; }
+        if (msg.type === "response.audio_transcript.done") {
+            const finalText = (msg.transcript || aiStreaming || "").trim();
+            if (finalText) currentAssistant ? finalize(currentAssistant, finalText) : appendMessageToDom("assistant", finalText);
+            aiStreaming = ""; currentAssistant = null; return;
         }
-
-        // assistant transcript deltas (stream) <-- My beta
-    if (msg.type === "response.audio_transcript.delta") {
-    aiStreaming += (msg.delta || "");
-    if (!aiStreaming) return;
-    updateStreamingAssistant(currentAssistant, aiStreaming);
-    return;
-    }
-
-    // assistant transcript done (final)
-    if (msg.type === "response.audio_transcript.done") {
-    const finalText = (msg.transcript || aiStreaming || "").trim();
-    if (finalText) {
-        if (currentAssistant) {
-        finalizeMessage(currentAssistant, finalText);
-        } else {
-        appendMessage("assistant", finalText);
-        }
-    }
-    aiStreaming = "";
-    currentAssistant = null;
-    return;
-    }
-    } catch (err) {
-        console.warn("Non-JSON message:", e.data);
-    }
+    } catch (err) { console.warn("Non-JSON message:", e?.data || err); }
     });
 
     pc.addEventListener("track", (ev) => {
-    console.log("🎵 Remote track received:", ev.track.kind);
-    if (!remoteEl.srcObject) {
-        remoteEl.srcObject = ev.streams[0];
-        remoteEl.volume = 1.0;
-        remoteEl.muted = false;
-        remoteEl.play().catch((e) => {
-        console.warn("⚠️ Autoplay blocked:", e);
-        statusEl.textContent = "Connected! Click anywhere to hear audio.";
-        document.addEventListener("click", () => remoteEl.play(), { once: true });
-        });}
-    });
+    if (!remote.srcObject) { 
+        remote.srcObject = ev.streams[0]; 
+        remote.volume = 1; 
+        remote.muted = false; 
+        remote.play().catch(() => 
+            {   status && (status.textContent = "Connected — click to allow audio"); 
+                document.addEventListener("click", () => remote.play(), 
+                { once: true }); }); }});
 
-    pc.addEventListener("iceconnectionstatechange", () => {
-    console.log("🧊 ICE:", pc.iceConnectionState);
-    });
-    pc.addEventListener("connectionstatechange", () => {
-    console.log("🔌 State:", pc.connectionState);
-    });
+    pc.addEventListener("iceconnectionstatechange", () => console.log("ICE:", pc.iceConnectionState));
+    pc.addEventListener("connectionstatechange", () => console.log("Conn:", pc.connectionState));
 
-    // add local mic tracks
-    mic.getAudioTracks().forEach((t) => pc.addTrack(t, mic));
+    mic.getAudioTracks().forEach(t => pc.addTrack(t, mic));
 
-    statusEl.textContent = "Creating offer...";
+    status && (status.textContent = "Creating offer...");
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     await waitForIceGathering(pc, 3000);
 
-    // fetch ephemeral session
-    statusEl.textContent = "Getting session...";
+    status && (status.textContent = "Getting session...");
     const sessResp = await fetch("/api/session");
-    if (!sessResp.ok) {
-    const errText = await sessResp.text();
-    console.error("❌ Session fetch failed:", errText);
-    throw new Error("Session failed: " + errText);
-    }
+    if (!sessResp.ok) throw new Error(await sessResp.text());
     const sess = await sessResp.json();
+    window.currentSessionId = sess?.id || null;
     const ephemeralKey = sess?.client_secret?.value;
-    if (!ephemeralKey) {
-    console.error("❌ Session response:", sess);
-    throw new Error("No ephemeral key in session response");
-    }
+    if (!ephemeralKey) throw new Error("No ephemeral key");
 
-    statusEl.textContent = "Exchanging SDP...";
-    const model = sess?.model;
-console.log("📡 Using model:", model);
-
-    const oaResp = await fetch(
-    `https://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`,
-    {
+    status && (status.textContent = "Exchanging SDP...");
+    const oaResp = await fetch(`https://api.openai.com/v1/realtime?model=${encodeURIComponent(sess.model)}`, {
         method: "POST",
-        headers: {
-        Authorization: `Bearer ${ephemeralKey}`,
-        "Content-Type": "application/sdp",
-        },
-        body: pc.localDescription.sdp,
-    }
-    );
-
-    if (!oaResp.ok) {
-    const err = await oaResp.text();
-    console.error("❌ OpenAI error:", oaResp.status, err);
-    throw new Error(`OpenAI SDP failed: ${oaResp.status}`);
-    }
-
+        headers: { Authorization: `Bearer ${ephemeralKey}`, "Content-Type": "application/sdp" },
+        body: pc.localDescription.sdp
+    });
+    if (!oaResp.ok) throw new Error(await oaResp.text());
     const answerSdp = await oaResp.text();
-    console.log("📥 Answer SDP length:", answerSdp.length);
     await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
 
-    console.log("✅ Remote description set successfully");
-    statusEl.textContent = "Connected";
-} catch (err) {
-    console.error("💥 Error:", err);
-    statusEl.textContent = "Error: " + (err?.message || err);
+    status && (status.textContent = "Connected");
+    } catch (err) {
+    console.error("startVoice err:", err);
+    $("status") && ($("status").textContent = "Error: " + (err?.message || err));
     toast("Error: " + (err?.message || "Unknown"));
-}
+    }}
+
+/* -----------------------------
+    Save conversation (simple)
+------------------------------ */
+async function saveConversationToServer(sessionId = null) {
+    if (!conversationMessages.length) return null;
+    try {
+    const r = await fetch("/api/conversation/", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session_id: sessionId, messages: conversationMessages }) });
+    if (!r.ok) { console.error("Save failed:", await r.text()); return null; }
+    window._conversationSaved = true;
+    toast("Conversation saved");
+    return await r.json();
+    } catch (err) { console.error("Save err:", err); toast("Save failed"); return null; }
 }
 
-document.getElementById("start")?.addEventListener("click", startVoice);
-
-// stop button: reload (simple cleanup)
+/* ---------------------------
+    Stop wiring & unload save
+---------------------------- */
 (() => {
-    const stopBtn = document.getElementById("stop");
-        if (!stopBtn) return;
-        if (stopBtn._wired) return;
+    const stopBtn = $("stop");
+    if (!stopBtn) return;
+    if (stopBtn._wired) return;
     stopBtn._wired = true;
-    stopBtn.addEventListener("click", () => {try { window.location.reload(); } catch {}});
-})();
+
+    stopBtn.addEventListener("click", async () => {
+    stopBtn.disabled = true;
+    $("status") && ($("status").textContent = "Saving...");
+    await saveConversationToServer(window.currentSessionId);          // wait until server responds
+    await toast("Conversation saved", 1500);    // wait until toast finishes
+    location.reload();                         // now safe to reload
+});})();
+
+
+/* -------------------------
+Hook start button
+------------------------- */
+document.getElementById("start")?.addEventListener("click", startVoice);

@@ -39,7 +39,11 @@ def create_realtime_session(request):
         if not data.get("client_secret", {}).get("value"):
             logger.warning("Session created but client_secret.value is missing")
 
-        return json_ok(data)
+        return json_ok({
+        "id": data.get("id"),
+        "model": data.get("model"),
+        "client_secret": data.get("client_secret"),
+    })
     except AppError as e:
         return json_fail(e.message, status=e.status, details=e.details)
     
@@ -59,7 +63,9 @@ def save_conversation(request):
         messages = body.get("messages")
         if messages is None or not isinstance(messages, list):
             return json_fail("Missing or invalid 'messages' (expecting list)", status=400)
+        session_id = body.get("session_id")
         conv = Conversation.objects.create(
+            session_id=session_id,
             messages=messages,
         )
         return json_ok({"conversation_id": conv.pk, "created_at": conv.created_at.isoformat()})
