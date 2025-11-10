@@ -276,10 +276,15 @@ async function saveConversationToServer(sessionId = null) {
         m.content && m.content.trim().length > 0
     );
     
-    if (!validMessages.length) return null;
+    if (!validMessages.length) {
+        toast("No messages to save");
+        return null;
+    }
     
     try {
-        const r = await fetch("/api/conversation/", { 
+        // Step 1: Save conversation
+        $("status") && ($("status").textContent = "Saving conversation...");
+        const saveResp = await fetch("/api/conversation/", { 
             method: "POST", 
             headers: { "Content-Type": "application/json" }, 
             body: JSON.stringify({ 
@@ -288,17 +293,41 @@ async function saveConversationToServer(sessionId = null) {
             }) 
         });
         
-        if (!r.ok) { 
-            console.error("Save failed:", await r.text()); 
+        if (!saveResp.ok) { 
+            console.error("Save failed:", await saveResp.text()); 
+            toast("Save failed");
             return null; 
         }
         
+        const saveData = await saveResp.json();
+        console.log("Conversation saved:", saveData);
+        
+        // Step 2: Analyze conversation to extract user_response
+        $("status") && ($("status").textContent = "Analyzing responses...");
+        const analyzeResp = await fetch("/api/conversation/analyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+                session_id: sessionId 
+            })
+        });
+        
+        if (!analyzeResp.ok) {
+            console.error("Analysis failed:", await analyzeResp.text());
+            toast("Conversation saved but analysis failed");
+            return saveData;
+        }
+        
+        const analyzeData = await analyzeResp.json();
+        console.log("Analysis completed:", analyzeData);
+        
         window._conversationSaved = true;
-        toast("Conversation saved");
-        return await r.json();
+        toast("Conversation saved & analyzed ✓");
+        return { ...saveData, analysis: analyzeData };
+        
     } catch (err) { 
-        console.error("Save err:", err); 
-        toast("Save failed"); 
+        console.error("Save/analyze error:", err); 
+        toast("Error: " + err.message); 
         return null; 
     }
 }

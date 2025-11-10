@@ -6,6 +6,14 @@ from . import constants as C
 import json
 from django.views.decorators.http import require_POST
 from .models import Conversation
+from .views_schema_ import (
+    DEFAULT_KEYS,
+    extract_keys_from_markdown,
+    build_dynamic_schema,
+    build_extractor_messages,
+)
+from typing import List, Dict, Any
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -75,3 +83,82 @@ def save_conversation(request):
     except Exception as exc:
         logger.exception("Failed saving conversation")
         return json_fail("Internal error saving conversation", status=500, details=str(exc))
+
+def _load_instruction_text() -> str:
+    """Get instruction markdown text via constants; safe fallback to empty string."""
+    try:
+        return C.get_persona() or ""
+    except Exception:
+        return ""
+
+def _analyze_user_responses(messages: List[Dict[str, Any]], api_key: str, model: str = None, keys: List[str] | None = None) -> Dict[str, Any]:
+    url = "https://api.openai.com/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    model = model or os.getenv("OPENAI_ANALYSIS_MODEL", "gpt-4o-mini")
+    # Determine keys dynamically from instructions if not provided
+    if not keys:
+        instruction_text = _load_instruction_text()
+        keys = extract_keys_from_markdown(instruction_text) or DEFAULT_KEYS
+
+    json_schema = build_dynamic_schema(keys)
+
+    payload = {
+        "model": model,
+        "temperature": 0.2,
+        "response_format": {"type": "json_schema", "json_schema": json_schema},
+        "messages": build_extractor_messages(messages, keys),
+    }
+    # Reuse helper to post and parse JSON
+    data = post_json(url, headers, payload, timeout=30)
+    try:
+        content = data["choices"][0]["message"]["content"]
+        parsed = json.loads(content)
+        # Ensure all keys exist (fill missing with empty string)
+        for k in keys:
+            if k not in parsed:
+                parsed[k] = ""
+        return parsed
+    except Exception:
+        # Fallback: return empty structure
+        return {k: "" for k in keys}
+
+
+@csrf_exempt
+@require_POST
+def analyze_conversation(request):
+    """Analyze a saved conversation and persist structured user responses to Conversation.user_response."""
+    try:
+        body = json.loads(request.body.decode("utf-8") or "{}")
+    except Exception:
+        return json_fail("Expected JSON body", status=400)
+
+    session_id = body.get("session_id")
+    if not session_id:
+        return json_fail("session_id is required", status=400)
+
+    try:
+        conv = Conversation.objects.get(session_id=session_id)
+    except Conversation.DoesNotExist:
+        return json_fail("Conversation not found", status=404)
+
+    api_key = require_env("OPENAI_API_KEY")
+    messages = conv.messages or []
+    if not isinstance(messages, list):
+        return json_fail("Conversation messages is not a list", status=400)
+
+    # Optional: allow client to submit custom keys for dynamic extraction
+    custom_keys = body.get("keys")
+    if custom_keys and isinstance(custom_keys, list):
+        # Normalize provided keys
+        custom_keys = [str(k).strip().replace("-", "_") for k in custom_keys if str(k).strip()]
+    else:
+        custom_keys = None
+
+    extracted = _analyze_user_responses(messages, api_key, keys=custom_keys)
+    conv.user_response = extracted
+    conv.save(update_fields=["user_response", "updated_at"])
+
+    return json_ok({"session_id": session_id, "user_response": extracted})
