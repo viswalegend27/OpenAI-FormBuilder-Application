@@ -9,6 +9,12 @@ async function waitForIceGathering(pc, timeout = 3000) {
 
 window.currentSessionId = null;
 window._conversationSaved = false; 
+// -- Runtime reference variables for my stop-handler
+window._pc = null;
+window._dc = null;
+window._micStream = null;
+window._remoteEl = null;
+
 /*-------------------------
 Minimal conversation memory
 ------------------------- */
@@ -73,10 +79,16 @@ async function startVoice() {
     try {
     status && (status.textContent = "Requesting mic...");
     const mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
-
+    // --- Defining for my stop handler
+    window._micStream = mic;
+    // RTC-Peer connection
     const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+    // --- Defining for my stop handler
+    window._pc = pc;
+    // Data-channel connection to openAI
     const dc = pc.createDataChannel("oai-events");
-
+    // --- Defining for my stop handler
+    window._dc = dc;
     dc.addEventListener("open", () => { stopBtn && (stopBtn.disabled = false); });
     dc.addEventListener("error", (e) => console.error("DataChannel err:", e));
     dc.addEventListener("message", (e) => {
@@ -109,7 +121,9 @@ async function startVoice() {
     if (!remote.srcObject) { 
         remote.srcObject = ev.streams[0]; 
         remote.volume = 1; 
-        remote.muted = false; 
+        remote.muted = false;
+        // -- Saving it for stop handler's usage
+        window._remoteEl = remote;
         remote.play().catch(() => 
             {   status && (status.textContent = "Connected — click to allow audio"); 
                 document.addEventListener("click", () => remote.play(), 
@@ -168,18 +182,76 @@ async function saveConversationToServer(sessionId = null) {
     Stop wiring & unload save
 ---------------------------- */
 (() => {
-    const stopBtn = $("stop");
-    if (!stopBtn) return;
-    if (stopBtn._wired) return;
-    stopBtn._wired = true;
+const stopBtn = $("stop");
+if (!stopBtn) return;
+if (stopBtn._wired) return;
+stopBtn._wired = true;
 
-    stopBtn.addEventListener("click", async () => {
+stopBtn.addEventListener("click", async () => {
     stopBtn.disabled = true;
+    $("status") && ($("status").textContent = "Stopping...");
+
+    // 1) Optional: notify backend to stop streaming (if supported)
+    try {
+    if (window._dc && window._dc.readyState === "open") {
+        window._dc.send(JSON.stringify({ type: "session.disconnect" }));
+    }
+    } catch (e) {
+    console.warn("dc notify failed", e);
+    }
+
+    // 2) Stop local mic tracks
+    try {
+    const mic = window._micStream;
+    if (mic && mic.getTracks) {
+        mic.getTracks().forEach((t) => t.stop());
+        window._micStream = null;
+    }
+    } catch (e) {
+    console.warn("stop mic failed", e);
+    }
+
+    // 3) Pause and clear the remote audio element
+    try {
+    const remoteEl = window._remoteEl || $("remote");
+    if (remoteEl) {
+        remoteEl.pause?.();
+        remoteEl.srcObject = null;
+        remoteEl.removeAttribute?.("src");
+        window._remoteEl = null;
+    }
+    } catch (e) {
+    console.warn("clear remote failed", e);
+    }
+
+    // 4) Close data channel
+    try {
+    if (window._dc) {
+        window._dc.close?.();
+        window._dc = null;
+    }
+    } catch (e) {
+    console.warn("close dc failed", e);
+    }
+
+    // 5) Stop senders and close peer connection
+    try {
+    if (window._pc) {
+        window._pc.getSenders?.().forEach((s) => s.track?.stop?.());
+        window._pc.close?.();
+        window._pc = null;
+    }
+    } catch (e) {
+    console.warn("close pc failed", e);
+    }
+
+    // 6) Save conversation then reload
     $("status") && ($("status").textContent = "Saving...");
-    await saveConversationToServer(window.currentSessionId);          // wait until server responds
-    await toast("Conversation saved", 1500);    // wait until toast finishes
-    location.reload();                         // now safe to reload
-});})();
+    await saveConversationToServer(window.currentSessionId);
+    await toast("Conversation saved", 1500);
+    location.reload();
+    });
+})();
 
 
 /* -------------------------
