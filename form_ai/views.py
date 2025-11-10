@@ -7,7 +7,6 @@ import json
 from django.views.decorators.http import require_POST
 from .models import Conversation
 from .views_schema_ import (
-    DEFAULT_KEYS,
     extract_keys_from_markdown,
     build_dynamic_schema,
     build_extractor_messages,
@@ -85,7 +84,7 @@ def save_conversation(request):
         return json_fail("Internal error saving conversation", status=500, details=str(exc))
 
 def _load_instruction_text() -> str:
-    """Get instruction markdown text via constants; safe fallback to empty string."""
+    # -- Where my AI person is loaded
     try:
         return C.get_persona() or ""
     except Exception:
@@ -101,8 +100,7 @@ def _analyze_user_responses(messages: List[Dict[str, Any]], api_key: str, model:
     # Determine keys dynamically from instructions if not provided
     if not keys:
         instruction_text = _load_instruction_text()
-        keys = extract_keys_from_markdown(instruction_text) or DEFAULT_KEYS
-
+        keys = extract_keys_from_markdown(instruction_text)
     json_schema = build_dynamic_schema(keys)
 
     payload = {
@@ -129,7 +127,7 @@ def _analyze_user_responses(messages: List[Dict[str, Any]], api_key: str, model:
 @csrf_exempt
 @require_POST
 def analyze_conversation(request):
-    """Analyze a saved conversation and persist structured user responses to Conversation.user_response."""
+    # -- Code used to analyze the save message for user_response
     try:
         body = json.loads(request.body.decode("utf-8") or "{}")
     except Exception:

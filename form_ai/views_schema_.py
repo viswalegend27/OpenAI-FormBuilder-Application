@@ -2,20 +2,6 @@ from typing import List, Dict, Any
 import re
 import json
 
-DEFAULT_KEYS: List[str] = [
-	"primary_expertise",
-	"top_project",
-	"proficiencies",
-	"debugging_approach",
-	"design_process",
-	"testing_practice",
-	"rapid_learning_example",
-	"collaboration_style",
-	"logistics",
-	"learning_goals",
-]
-
-
 def extract_keys_from_markdown(md_text: str) -> List[str]:
 	keys: List[str] = []
 	for line in md_text.splitlines():
