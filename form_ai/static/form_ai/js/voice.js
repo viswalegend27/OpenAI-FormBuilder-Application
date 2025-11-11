@@ -187,7 +187,7 @@ async function startVoice() {
                     return; 
                 }
                 
-                // ✅ FIX: Only finalize and save if there's actual content
+                // Finalize and save if there's actual content
                 if (msg.type === "response.audio_transcript.done") {
                     const finalText = (msg.transcript || aiStreaming || "").trim();
                     
