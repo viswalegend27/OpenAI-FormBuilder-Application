@@ -86,9 +86,9 @@ def save_conversation(request):
 def _load_instruction_text() -> str:
     # -- Where my AI person is loaded
     try:
-        return C.get_persona() or ""
+        return C.get_persona() 
     except Exception:
-        return ""
+        return "No ai character"
 
 def _analyze_user_responses(messages: List[Dict[str, Any]], api_key: str, model: str = None, keys: List[str] | None = None) -> Dict[str, Any]:
     url = "https://api.openai.com/v1/chat/completions"

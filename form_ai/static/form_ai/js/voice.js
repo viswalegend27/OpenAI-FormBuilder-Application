@@ -178,7 +178,7 @@ async function startVoice() {
                     return; 
                 }
                 
-                // Update streaming (still don't save)
+                // Update streaming in my UI. using the openAI's audio trancription.
                 if (msg.type === "response.audio_transcript.delta") { 
                     aiStreaming += msg.delta || ""; 
                     if (aiStreaming) {
@@ -188,6 +188,7 @@ async function startVoice() {
                 }
                 
                 // Finalize and save if there's actual content
+                // Done the streaming and save it to my memory.
                 if (msg.type === "response.audio_transcript.done") {
                     const finalText = (msg.transcript || aiStreaming || "").trim();
                     
@@ -220,13 +221,6 @@ async function startVoice() {
                 });
             }
         });
-
-        pc.addEventListener("iceconnectionstatechange", () => 
-            console.log("ICE:", pc.iceConnectionState)
-        );
-        pc.addEventListener("connectionstatechange", () => 
-            console.log("Conn:", pc.connectionState)
-        );
 
         mic.getAudioTracks().forEach(t => pc.addTrack(t, mic));
 
