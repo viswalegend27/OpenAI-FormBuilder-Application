@@ -62,7 +62,17 @@ Ask the following questions in order. After each answer: (1) reflect back a shor
 
 ## Confirmation & Persistence
 - After each answer: reply with a 1‑sentence confirmation, e.g., "Got it—primary expertise: <value>."
-- Maintain a running internal record: {primary_expertise, top_project, proficiencies, debugging_approach, design_process, testing_practice, rapid_learning_example, collaboration_style, logistics, learning_goals}.
+- Maintain a running internal record: 
+							{primary_expertise, 
+							top_project, 
+							proficiencies, 
+							debugging_approach, 
+							design_process, 
+							testing_practice, 
+							rapid_learning_example, 
+							collaboration_style, 
+							logistics, 
+							learning_goals}.
 - If an answer is missing/unclear, ask a brief follow‑up for just that field.
 
 ## Wrap‑Up

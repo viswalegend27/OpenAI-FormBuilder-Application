@@ -2,8 +2,6 @@ import os
 import logging
 from django.conf import settings
 
-OPENAI_BETA_HEADER_VALUE = "realtime=v1"
-
 # Setting an variable to point towards the ai_instructions.md
 _INSTRUCTIONS_MD = settings.AI_INSTRUCTIONS_PATH
 
@@ -36,8 +34,8 @@ def get_session_payload() -> dict:
         },
         "turn_detection": {
             "type": "server_vad",
-            "threshold": 0.5,
+            "threshold": 0.8,
             "prefix_padding_ms": 300,
-            "silence_duration_ms": 500
+            "silence_duration_ms": 1000
         },
     }
