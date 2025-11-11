@@ -147,15 +147,7 @@ def analyze_conversation(request):
     if not isinstance(messages, list):
         return json_fail("Conversation messages is not a list", status=400)
 
-    # Optional: allow client to submit custom keys for dynamic extraction
-    custom_keys = body.get("keys")
-    if custom_keys and isinstance(custom_keys, list):
-        # Normalize provided keys
-        custom_keys = [str(k).strip().replace("-", "_") for k in custom_keys if str(k).strip()]
-    else:
-        custom_keys = None
-
-    extracted = _analyze_user_responses(messages, api_key, keys=custom_keys)
+    extracted = _analyze_user_responses(messages, api_key)
     conv.user_response = extracted
     conv.save(update_fields=["user_response", "updated_at"])
 
