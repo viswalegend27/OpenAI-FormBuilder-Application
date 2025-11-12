@@ -20,6 +20,9 @@ Minimal conversation memory
 ------------------------- */
 const conversationMessages = []; 
 
+// Flag for my assistant conversation saving.
+let isNewAssistantResponse = true;
+
 const pushMessage = (role, text) => {
     if (!text || !text.trim()) return; // Prevent empty messages from being pushed into my code.
     conversationMessages.push({ 
@@ -31,8 +34,16 @@ const pushMessage = (role, text) => {
 
 // Logic to look out for uploading updates if only text.
 const updateLastAssistant = (text) => {
-    if (!text || !text.trim()) return; //ADDED: Prevent empty updates
+    if (!text || !text.trim()) return;
     
+    // If this is a new response, always create a new message
+    if (isNewAssistantResponse) {
+        pushMessage("assistant", text);
+        isNewAssistantResponse = false; // Mark that we've created the message
+        return;
+    }
+    
+    // Otherwise, update the most recent assistant message
     for (let i = conversationMessages.length - 1; i >= 0; i--) {
         if (conversationMessages[i].role === "assistant") { 
             conversationMessages[i].content = text.trim(); 
@@ -40,8 +51,11 @@ const updateLastAssistant = (text) => {
             return; 
         }
     }
+    
+    // Fallback: create new if somehow none exists
     pushMessage("assistant", text);
 };
+
 
 /*-------------------------
     Compact UI helpers
@@ -170,7 +184,13 @@ async function startVoice() {
                         appendMessageToDom("user", t, true); // Save to memory
                     }
                 }
-
+                // Resets ny flag when a new response is generated
+                if (msg.type === "response.created") { 
+                    aiStreaming = ""; 
+                    isNewAssistantResponse = true; // Mark as new response
+                    currentAssistant = appendMessageToDom("assistant", "", false);
+                    return; 
+                }
                 // Create placeholder without saving to memory
                 if (msg.type === "response.created") { 
                     aiStreaming = ""; 
@@ -202,6 +222,7 @@ async function startVoice() {
                             currentAssistant.msgEl.remove();}
                     aiStreaming = ""; 
                     currentAssistant = null; 
+                    isNewAssistantResponse = true;
                     return;
                 }
             } catch (err) { 
