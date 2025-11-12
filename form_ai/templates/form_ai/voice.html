@@ -8,36 +8,46 @@
 <link rel="stylesheet" href="{% static 'form_ai/css/voice.css' %}">
 </head>
 <body>
-    <header class="header">
+<header class="header">
     <h1>OpenAI Realtime Form Builder</h1>
-        <div class="controls">
-        <button id="start">Start</button>
-        <button id="stop" disabled>Stop</button>
-        <span id="status">Click “Start” to begin</span>
-        </div>
-    </header>
+    <!-- header no longer contains controls -->
+</header>
 
 <main class="layout">
-    <!-- left area (optional content / placeholder) -->
     <section class="workspace" aria-hidden="true">
-    <!-- You can put other UI here (preview, forms, docs). Kept empty intentionally. -->
+    <!-- left content -->
     </section>
 
-    <!-- chat area fixed to right -->
     <aside class="chat-wrapper" aria-label="Conversation panel">
         <div class="panel">
-        <h2>Conversation</h2>
+        <!-- Panel header -->
+        <div class="panel-header">
+            <h2>Conversation</h2>
+        </div>
+
+        <!-- Conversation (flex-grow) -->
         <div id="conversation" class="conversation empty" role="log" aria-live="polite"></div>
 
-        <div class="audio">
-            <audio id="remote" autoplay playsinline></audio>
+        <!-- Bottom controls (fixed inside panel flow) -->
+        <div class="panel-controls" role="region" aria-label="Recording controls">
+            <div class="controls-left">
+            <button id="start" class="control-btn">Start</button>
+            <button id="stop" class="control-btn" disabled>Stop</button>
+            </div>
+            <div class="controls-right">
+            <span id="status" class="control-status">Click “Start” to begin</span>
+            </div>
         </div>
-    </div>
+
+        <!-- Audio sits below controls -->
+            <div class="audio">
+            <audio id="remote" autoplay playsinline></audio>
+            </div>
+        </div>
     </aside>
-</main>
+    </main>
 
-<div id="toast-message" class="toast" role="status" aria-live="polite"></div>
-<script src="{% static 'form_ai/js/voice.js' %}"></script>
-
+    <div id="toast-message" class="toast" role="status" aria-live="polite"></div>
+    <script src="{% static 'form_ai/js/voice.js' %}"></script>
 </body>
 </html>
