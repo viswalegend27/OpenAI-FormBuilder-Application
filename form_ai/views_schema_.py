@@ -39,3 +39,8 @@ def build_extractor_messages(messages: List[Dict[str, Any]], keys: List[str]) ->
 		{"role": "user", "content": user},
 	]
 
+def get_recent_user_responses(limit: int = 10) -> List[Dict[str, Any]]:
+    # This function should query the database for recent user responses
+    # and return them in a structured format.
+    # Placeholder for actual implementation.
+    return []  # Intentionally left blank for now.

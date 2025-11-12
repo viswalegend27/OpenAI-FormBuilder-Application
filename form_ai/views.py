@@ -152,3 +152,55 @@ def analyze_conversation(request):
     conv.save(update_fields=["user_response", "updated_at"])
 
     return json_ok({"session_id": session_id, "user_response": extracted})
+
+def recent_responses(request):
+    # Fetch recent user responses from the Conversation model
+    recent_conversations = Conversation.objects.order_by('-created_at')[:10]  # Get the last 10 responses
+    return render(request, "form_ai/responses.html", {"conversations": recent_conversations})
+
+def view_recent_responses(request):
+    """
+    Display recent conversations that have been analyzed.
+    Shows conversations with non-null and non-empty user_response.
+    """
+    # Get all conversations for debugging (optional)
+    all_count = Conversation.objects.count()
+    
+    # Get analyzed conversations
+    qs = (
+        Conversation.objects
+        .filter(user_response__isnull=False)
+        .exclude(user_response={})
+        .order_by('-created_at')[:20]
+    )
+    
+    # Debug logging
+    logger.info(f"Total conversations: {all_count}, Analyzed: {qs.count()}")
+    
+    return render(request, "form_ai/responses.html", {
+        "conversations": qs,  # Fixed: was "conversations", template expected "responses"
+        "total_count": all_count,
+        "analyzed_count": qs.count(),
+    })
+    
+def debug_all_conversations(request):
+    """Debug view to see all conversations including unanalyzed ones"""
+    qs = Conversation.objects.order_by('-created_at')[:20]
+
+    conversations_data = []
+    conversations_data.extend(
+        {
+            'id': conv.pk,
+            'session_id': conv.session_id,
+            'created_at': conv.created_at,
+            'has_user_response': bool(
+                conv.user_response and conv.user_response != {}
+            ),
+            'user_response': conv.user_response,
+            'message_count': len(conv.messages) if conv.messages else 0,
+        }
+        for conv in qs
+    )
+    return render(request, "form_ai/debug_conversations.html", {
+        "conversations": conversations_data
+    })

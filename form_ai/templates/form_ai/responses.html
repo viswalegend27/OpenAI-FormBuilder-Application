@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Recent User Responses</title>
+    {% load static %}
+    <link rel="icon" href="{% static 'form_ai/favicon.ico' %}" sizes="any">
+    <link rel="stylesheet" href="{% static 'form_ai/css/responses.css' %}">
+</head>
+<body>
+<header class="header">
+    <h1>Recent User Responses</h1>
+    <a href="{% url 'voice_page' %}" class="control-btn" style="float:right; color: white; text-decoration: none; padding: 8px 16px;">Back to Voice</a>
+</header>
+
+<main class="layout">
+    <section class="responses-wrapper">
+        <div class="responses">
+            {% if conversations %}
+                <ul style="list-style: none; padding: 0;">
+                    {% for conv in conversations %}
+                        <li class="response-container">
+                            <div style="margin-bottom: 8px;">
+                                <strong>Session ID:</strong> {{ conv.session_id|default:"N/A" }}
+                            </div>
+                            <div style="margin-bottom: 8px;">
+                                <strong>Created At:</strong> {{ conv.created_at|date:"Y-m-d H:i:s" }}
+                            </div>
+                            
+                            {% if conv.user_response %}
+                                <div class="response-data">
+                                    <strong style="display: block; margin-bottom: 8px;">Extracted Responses:</strong>
+                                    {% for key, value in conv.user_response.items %}
+                                        <div style="margin: 6px 0; padding-left: 10px;">
+                                            <strong>{{ key|title }}:</strong> 
+                                            <span class="{% if value %}value-provided{% else %}value-empty{% endif %}">
+                                                {{ value|default:"(not provided)" }}
+                                            </span>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                <div style="color: #999; font-style: italic; margin-top: 8px;">
+                                    No extracted responses available
+                                </div>
+                            {% endif %}
+                        </li>
+                        
+                        {% if not forloop.last %}
+                            <hr style="margin: 20px 0; border: none; border-top: 1px solid #e0e0e0;">
+                        {% endif %}
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <div class="empty-state">
+                    <p>No analyzed conversations found.</p>
+                    <p style="font-size: 14px; color: #666;">
+                        Make sure to complete a conversation and click "Stop" before checking responses.
+                    </p>
+                </div>
+            {% endif %}
+        </div>
+    </section>
+</main>
+
+</body>
+</html>

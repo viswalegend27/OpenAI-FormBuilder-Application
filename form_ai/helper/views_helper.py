@@ -2,16 +2,17 @@ import os
 import logging
 import requests
 from django.http import JsonResponse
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
 class AppError(Exception):
     # AppError is an custom exception to carry out finding the HTTP-friendly error
-    def __init__(self, message: str, status: int = 500):
+    def __init__(self, message: str, status: int = 500, details: Any | None = None):
         super().__init__(message)
         self.message = message # Contains messages human readable error
         self.status = status # Sending out http status codes
+        self.details = details
 
 # Used to wrap any HTTP resp as JSON 
 def json_ok(payload, status: int = 200) -> JsonResponse:
@@ -59,3 +60,6 @@ def post_json(url: str, headers: dict, payload: dict, timeout: int = 20) -> Dict
         raise AppError("Invalid JSON from OpenAI", status=502, details=resp.text[:800])
 
     return parsed
+
+def get_recent_user_responses(conversation_model, limit: int = 10) -> List[Dict[str, Any]]:
+    return list(conversation_model.objects.order_by('-created_at')[:limit].values('session_id', 'messages', 'created_at'))
