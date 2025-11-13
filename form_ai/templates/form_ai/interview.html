@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>{{ form.title }} - Interview</title>
+    {% load static %}
+    <link rel="icon" href="{% static 'form_ai/favicon.ico' %}" sizes="any">
+    <link rel="stylesheet" href="{% static 'form_ai/css/interview.css' %}">
+</head>
+<body>
+    <header class="header" role="banner">
+        <h1>{{ form.title }}</h1>
+    </header>
+
+    <main class="layout">
+        <aside class="chat-wrapper" aria-label="Interview conversation">
+            <div class="panel">
+                <!-- Panel header -->
+                <div class="panel-header">
+                    <h2>Interview Session</h2>
+                </div>
+
+                <!-- Conversation area -->
+                <div id="conversation" class="conversation empty" role="log" aria-live="polite">
+                    <div class="welcome-message">
+                        <p>Click "Start Interview" to begin your voice interview.</p>
+                        <p class="sub-text">Make sure your microphone is enabled.</p>
+                    </div>
+                </div>
+
+                <!-- Controls -->
+                <div class="panel-controls" role="region" aria-label="Interview controls">
+                    <div class="controls-left">
+                        <button id="start" class="control-btn primary">Start Interview</button>
+                        <button id="stop" class="control-btn" disabled>Stop</button>
+                    </div>
+                    <div class="controls-right">
+                        <span id="status" class="control-status">Ready to start</span>
+                    </div>
+                </div>
+
+                <!-- Audio element -->
+                <div class="audio">
+                    <audio id="remote" autoplay playsinline></audio>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <div id="toast-message" class="toast" role="status" aria-live="polite"></div>
+    
+    <!-- Pass form_id to JavaScript -->
+    <script>
+        window.INTERVIEW_FORM_ID = "{{ form_id }}";
+    </script>
+    <script src="{% static 'form_ai/js/interview.js' %}"></script>
+</body>
+</html>

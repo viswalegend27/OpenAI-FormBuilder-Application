@@ -1,11 +1,11 @@
 import logging
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404, redirect
 from django.views.decorators.csrf import csrf_exempt
 from .helper.views_helper import AppError, json_ok, json_fail, require_env, post_json
 from . import constants as C
 import json
 from django.views.decorators.http import require_POST
-from .models import Conversation
+from .models import Conversation, InterviewForm, InterviewResponse
 from .views_schema_ import (
     extract_keys_from_markdown,
     build_dynamic_schema,
@@ -203,4 +203,165 @@ def debug_all_conversations(request):
     )
     return render(request, "form_ai/debug_conversations.html", {
         "conversations": conversations_data
+    })
+
+# Create a new interview form
+@csrf_exempt
+def create_interview_form(request):
+    """Creates a new interview form and returns the unique URL"""
+    try:
+        if request.method == "POST":
+            body = json.loads(request.body.decode("utf-8") or "{}")
+            title = body.get("title", "Internship Application")
+            instructions = body.get("instructions", _load_instruction_text())
+            expected_fields = body.get("expected_fields", ["name", "qualification", "experience"])
+            
+            form = InterviewForm.objects.create(
+                title=title,
+                instructions=instructions,
+                expected_fields=expected_fields
+            )
+            
+            return json_ok({
+                "form_id": str(form.id),
+                "interview_url": request.build_absolute_uri(form.get_interview_url()),
+                "title": form.title
+            })
+        else:
+            # GET request - create with defaults
+            form = InterviewForm.objects.create(
+                title="Internship Application",
+                instructions=_load_instruction_text(),
+                expected_fields=["name", "qualification", "experience"]
+            )
+            
+            # Redirect to the form list or return JSON
+            return redirect('manage_forms')
+            
+    except Exception as exc:
+        logger.exception("Failed creating interview form")
+        return json_fail("Failed to create form", status=500, details=str(exc))
+
+
+# Render the interview page
+def conduct_interview(request, form_id):
+    """Renders the interview page for a specific form"""
+    form = get_object_or_404(InterviewForm, id=form_id, is_active=True)
+    
+    return render(request, "form_ai/interview.html", {
+        "form": form,
+        "form_id": str(form.id)
+    })
+
+
+# Save interview conversation
+@csrf_exempt
+@require_POST
+def save_interview_response(request, form_id):
+    """Saves the interview conversation for a specific form"""
+    try:
+        form = get_object_or_404(InterviewForm, id=form_id)
+        
+        body = json.loads(request.body.decode("utf-8") or "{}")
+        messages = body.get("messages")
+        
+        if not isinstance(messages, list):
+            return json_fail("Invalid messages format", status=400)
+        
+        session_id = body.get("session_id")
+        
+        # Create interview response
+        response = InterviewResponse.objects.create(
+            form=form,
+            session_id=session_id,
+            messages=messages
+        )
+        
+        return json_ok({
+            "response_id": str(response.id),
+            "created_at": response.created_at.isoformat()
+        })
+        
+    except InterviewForm.DoesNotExist:
+        return json_fail("Interview form not found", status=404)
+    except Exception as exc:
+        logger.exception("Failed saving interview response")
+        return json_fail("Internal error", status=500, details=str(exc))
+# Analyze interview response
+@csrf_exempt
+@require_POST
+def analyze_interview_response(request, form_id):
+    """Analyzes the interview conversation and extracts structured data"""
+    try:
+        form = get_object_or_404(InterviewForm, id=form_id)
+        body = json.loads(request.body.decode("utf-8") or "{}")
+        
+        session_id = body.get("session_id")
+        if not session_id:
+            return json_fail("session_id required", status=400)
+        
+        # Find the response
+        response = InterviewResponse.objects.filter(
+            form=form,
+            session_id=session_id
+        ).order_by('-created_at').first()
+        
+        if not response:
+            return json_fail("Interview response not found", status=404)
+        
+        # Analyze using the form's expected fields
+        api_key = require_env("OPENAI_API_KEY")
+        extracted = _analyze_user_responses(
+            response.messages,
+            api_key,
+            keys=form.expected_fields
+        )
+        
+        # Update response
+        response.user_response = extracted
+        response.completed = True
+        response.save(update_fields=["user_response", "completed", "updated_at"])
+        
+        return json_ok({
+            "response_id": str(response.id),
+            "user_response": extracted
+        })
+        
+    except Exception as exc:
+        logger.exception("Failed analyzing interview")
+        return json_fail("Analysis failed", status=500, details=str(exc))
+
+
+# View all forms and their responses
+def manage_forms(request):
+    """Lists all interview forms and their responses"""
+    forms = InterviewForm.objects.filter(is_active=True).prefetch_related('responses')
+    
+    forms_data = []
+    for form in forms:
+        forms_data.append({
+            'form': form,
+            'response_count': form.responses.count(),
+            'completed_count': form.responses.filter(completed=True).count(),
+            'interview_url': request.build_absolute_uri(form.get_interview_url())
+        })
+    
+    return render(request, "form_ai/manage_forms.html", {
+        "forms": forms_data
+    })
+
+
+# View responses for a specific form
+def view_form_responses(request, form_id):
+    """View all responses for a specific interview form"""
+    form = get_object_or_404(InterviewForm, id=form_id)
+    responses = InterviewResponse.objects.filter(
+        form=form,
+        completed=True,
+        user_response__isnull=False
+    ).exclude(user_response={}).order_by('-created_at')
+    
+    return render(request, "form_ai/form_responses.html", {
+        "form": form,
+        "responses": responses
     })

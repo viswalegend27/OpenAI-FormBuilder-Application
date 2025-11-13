@@ -11,6 +11,11 @@
 <header class="header">
     <h1>Recent User Responses</h1>
     <a href="{% url 'voice_page' %}" class="control-btn back-btn">Back to Voice</a>
+    <!-- In the header of responses.html, add: -->
+    <nav class="header-actions" aria-label="Primary actions">
+        <a href="{% url 'manage_forms' %}" class="control-btn">Interview Forms</a>
+        <a href="{% url 'voice_page' %}" class="control-btn">Voice</a>
+    </nav>
 </header>
 
 <main class="layout">
