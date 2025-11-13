@@ -8,47 +8,54 @@
 <link rel="stylesheet" href="{% static 'form_ai/css/voice.css' %}">
 </head>
 <body>
-<header class="header">
+<header class="header" role="banner">
     <h1>OpenAI Realtime Form Builder</h1>
-    <!-- header no longer contains controls -->
+
+<!-- Header action: Forms anchor aligned to the right via header flex layout -->
+<nav class="header-actions" aria-label="Primary actions">
+    <a href="{% url 'view_recent_responses' %}"
+        class="control-btn"
+        aria-label="View recent forms">
+    Forms
+    </a>
+</nav>
 </header>
 
 <main class="layout">
-    <section class="workspace" aria-hidden="true">
+<section class="workspace" aria-hidden="true">
     <!-- left content -->
-    </section>
+</section>
 
-    <aside class="chat-wrapper" aria-label="Conversation panel">
-        <div class="panel">
-        <!-- Panel header -->
-        <div class="panel-header">
-            <h2>Conversation</h2>
-            <a href="{% url 'view_recent_responses' %}" class="control-btn" style="float:right;">Recent</a>
+<aside class="chat-wrapper" aria-label="Conversation panel">
+    <div class="panel">
+    <!-- Panel header (no controls here) -->
+    <div class="panel-header">
+        <h2>Conversation</h2>
+    </div>
+
+    <!-- Conversation (flex-grow) -->
+    <div id="conversation" class="conversation empty" role="log" aria-live="polite"></div>
+
+    <!-- Bottom controls (fixed inside panel flow) -->
+    <div class="panel-controls" role="region" aria-label="Recording controls">
+        <div class="controls-left">
+        <button id="start" class="control-btn">Start</button>
+        <button id="stop" class="control-btn" disabled>Stop</button>
         </div>
-
-        <!-- Conversation (flex-grow) -->
-        <div id="conversation" class="conversation empty" role="log" aria-live="polite"></div>
-
-        <!-- Bottom controls (fixed inside panel flow) -->
-        <div class="panel-controls" role="region" aria-label="Recording controls">
-            <div class="controls-left">
-            <button id="start" class="control-btn">Start</button>
-            <button id="stop" class="control-btn" disabled>Stop</button>
-            </div>
-            <div class="controls-right">
-            <span id="status" class="control-status">Click “Start” to begin</span>
-            </div>
+        <div class="controls-right">
+        <span id="status" class="control-status">Click “Start” to begin</span>
         </div>
+    </div>
 
-        <!-- Audio sits below controls -->
-            <div class="audio">
-            <audio id="remote" autoplay playsinline></audio>
-            </div>
-        </div>
-    </aside>
-    </main>
+    <!-- Audio sits below controls -->
+    <div class="audio">
+        <audio id="remote" autoplay playsinline></audio>
+    </div>
+    </div>
+</aside>
+</main>
 
-    <div id="toast-message" class="toast" role="status" aria-live="polite"></div>
-    <script src="{% static 'form_ai/js/voice.js' %}"></script>
+<div id="toast-message" class="toast" role="status" aria-live="polite"></div>
+<script src="{% static 'form_ai/js/voice.js' %}"></script>
 </body>
 </html>
