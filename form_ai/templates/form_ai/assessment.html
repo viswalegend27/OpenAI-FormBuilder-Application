@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Technical Assessment</title>
+{% load static %}
+<link rel="icon" href="{% static 'form_ai/favicon.ico' %}">
+<link rel="stylesheet" href="{% static 'form_ai/css/interview.css' %}">
+</head>
+<body>
+<header class="header">
+<h1>Technical Assessment</h1>
+</header>
+
+<main class="layout">
+<aside class="chat-wrapper">
+<div class="panel">
+<div class="panel-header">
+<h2>Assessment Interview</h2>
+<p style="font-size:0.875rem; color:#666; margin-top:0.5rem;">
+{{ user_info.name }} - {{ user_info.qualification }}
+</p>
+</div>
+
+<div id="conversation" class="conversation empty" role="log" aria-live="polite">
+<div class="welcome-message">
+<p>Click "Start Assessment" to begin your technical interview.</p>
+<p class="sub-text">Make sure your microphone is enabled.</p>
+</div>
+</div>
+
+<div class="panel-controls">
+<div class="controls-left">
+<button id="start" class="control-btn primary">Start Assessment</button>
+<button id="stop" class="control-btn" disabled>Stop</button>
+</div>
+<div class="controls-right">
+<span id="status" class="control-status">Ready to start</span>
+</div>
+</div>
+
+<div class="audio">
+<audio id="remote" autoplay playsinline></audio>
+</div>
+</div>
+</aside>
+</main>
+
+<div id="toast-message" class="toast" role="status" aria-live="polite"></div>
+
+<!-- JSON data as script tags -->
+{{ assessment.questions|json_script:"assessment-questions" }}
+{{ user_info|json_script:"user-info" }}
+
+<script>
+// Parse JSON data from script tags
+window.ASSESSMENT_ID = "{{ assessment_id }}";
+window.ASSESSMENT_QUESTIONS = JSON.parse(document.getElementById('assessment-questions').textContent);
+window.USER_INFO = JSON.parse(document.getElementById('user-info').textContent);
+</script>
+<script src="{% static 'form_ai/js/assessment.js' %}"></script>
+</body>
+</html>

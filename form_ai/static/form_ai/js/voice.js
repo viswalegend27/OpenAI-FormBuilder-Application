@@ -1,4 +1,3 @@
-// wait for ICE to finish or timeout
 async function waitForIceGathering(pc, timeout = 3000) {
     if (pc.iceGatheringState === "complete") return;
     return new Promise((res) => {
@@ -9,57 +8,45 @@ async function waitForIceGathering(pc, timeout = 3000) {
 }
 
 window.currentSessionId = null;
-window._conversationSaved = false; 
+window._conversationSaved = false;
 window._pc = null;
 window._dc = null;
 window._micStream = null;
 window._remoteEl = null;
+window._verifiedData = null;
 
-/*-------------------------
-Minimal conversation memory
-------------------------- */
-const conversationMessages = []; 
-
-// Flag for my assistant conversation saving.
+const conversationMessages = [];
 let isNewAssistantResponse = true;
 
 const pushMessage = (role, text) => {
-    if (!text || !text.trim()) return; // Prevent empty messages from being pushed into my code.
-    conversationMessages.push({ 
-        role, 
-        content: text.trim(), 
-        ts: new Date().toISOString() 
+    if (!text || !text.trim()) return;
+    conversationMessages.push({
+        role,
+        content: text.trim(),
+        ts: new Date().toISOString()
     });
 };
 
-// Logic to look out for uploading updates if only text.
 const updateLastAssistant = (text) => {
     if (!text || !text.trim()) return;
-    
-    // If this is a new response, always create a new message
+
     if (isNewAssistantResponse) {
         pushMessage("assistant", text);
-        isNewAssistantResponse = false; // Mark that we've created the message
+        isNewAssistantResponse = false;
         return;
     }
-    
-    // Otherwise, update the most recent assistant message
+
     for (let i = conversationMessages.length - 1; i >= 0; i--) {
-        if (conversationMessages[i].role === "assistant") { 
-            conversationMessages[i].content = text.trim(); 
-            conversationMessages[i].ts = new Date().toISOString(); 
-            return; 
+        if (conversationMessages[i].role === "assistant") {
+            conversationMessages[i].content = text.trim();
+            conversationMessages[i].ts = new Date().toISOString();
+            return;
         }
     }
-    
-    // Fallback: create new if somehow none exists
+
     pushMessage("assistant", text);
 };
 
-
-/*-------------------------
-    Compact UI helpers
-------------------------- */
 const $ = (id) => document.getElementById(id);
 let toastTimer;
 
@@ -79,96 +66,135 @@ function toast(msg, ms = 3000) {
     });
 }
 
-// Add a flag to control whether to save to conversationMessages
 const appendMessageToDom = (role, text = "", saveToMemory = true) => {
-    const conv = $("conversation"); 
+    const conv = $("conversation");
     if (!conv) return null;
-    
+
     if (conv.classList.contains("empty")) conv.classList.remove("empty");
-    
-    const msg = document.createElement("div"); 
+
+    const msg = document.createElement("div");
     msg.className = "message " + (role === "user" ? "user" : "assistant");
-    
-    const bubble = document.createElement("div"); 
-    bubble.className = "bubble"; 
+
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
     bubble.textContent = text;
-    
-    const meta = document.createElement("div"); 
-    meta.className = "meta"; 
-    meta.textContent = role === "user" ? "You" : "Assistant";
-    
-    msg.append(bubble, meta); 
-    conv.appendChild(msg); 
+
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = role === "user" ? "You" : "Tyler";
+
+    msg.append(bubble, meta);
+    conv.appendChild(msg);
     conv.scrollTop = conv.scrollHeight;
-    
-    // Only save to memory if flag is true AND text is not empty
+
     if (saveToMemory && text && text.trim()) {
         pushMessage(role, text);
     }
-    
+
     return { msgEl: msg, bubbleEl: bubble };
 };
 
-const updateStreaming = (el, text) => { 
-    if (!el || !text) return; 
-    el.bubbleEl.textContent = text; 
-    el.msgEl.classList.add("streaming"); 
-    updateLastAssistant(text); 
-    el.msgEl.scrollIntoView({ block: "end", behavior: "smooth" }); 
+const updateStreaming = (el, text) => {
+    if (!el || !text) return;
+    el.bubbleEl.textContent = text;
+    el.msgEl.classList.add("streaming");
+    updateLastAssistant(text);
+    el.msgEl.scrollIntoView({ block: "end", behavior: "smooth" });
 };
 
-// Only finalize if there's actual text
-const finalize = (el, text) => { 
+const finalize = (el, text) => {
     if (!el) return;
-    
+
     const trimmedText = (text || "").trim();
-    
-    // If no text, remove the element from DOM
+
     if (!trimmedText) {
         el.msgEl.remove();
         return;
     }
-    
-    el.bubbleEl.textContent = trimmedText; 
-    el.msgEl.classList.remove("streaming"); 
-    updateLastAssistant(trimmedText); 
-    el.msgEl.scrollIntoView({ block: "end", behavior: "smooth" }); 
+
+    el.bubbleEl.textContent = trimmedText;
+    el.msgEl.classList.remove("streaming");
+    updateLastAssistant(trimmedText);
+    el.msgEl.scrollIntoView({ block: "end", behavior: "smooth" });
 };
 
-/*-------------------------
-    Main flow: startVoice
-------------------------- */
+function showVerificationPopup(data) {
+    const popup = $("verification-popup");
+    $("verify-name").value = data.name || "";
+    $("verify-qualification").value = data.qualification || "";
+    $("verify-experience").value = data.experience || "";
+    popup.style.display = "flex";
+}
+
+function hideVerificationPopup() {
+    $("verification-popup").style.display = "none";
+}
+
+// Setup verification popup handlers
+(() => {
+    $("verify-confirm")?.addEventListener("click", () => {
+        window._verifiedData = {
+            name: $("verify-name").value,
+            qualification: $("verify-qualification").value,
+            experience: $("verify-experience").value
+        };
+        hideVerificationPopup();
+        toast("Information verified ✓");
+        
+        // Send confirmation to AI
+        if (window._dc && window._dc.readyState === "open") {
+            window._dc.send(JSON.stringify({
+                type: "conversation.item.create",
+                item: {
+                    type: "message",
+                    role: "user",
+                    content: [{
+                        type: "input_text",
+                        text: "Information verified and confirmed"
+                    }]
+                }
+            }));
+            window._dc.send(JSON.stringify({ type: "response.create" }));
+        }
+    });
+
+    $("verify-cancel")?.addEventListener("click", () => {
+        hideVerificationPopup();
+        toast("Verification cancelled");
+    });
+})();
+
 async function startVoice() {
     const status = $("status"), remote = $("remote"), stopBtn = $("stop");
     let currentAssistant = null, aiStreaming = "", sessionCreated = false;
 
     try {
         status && (status.textContent = "Requesting mic...");
-        const mic = await navigator.mediaDevices.getUserMedia({ 
-            audio: { echoCancellation: true, noiseSuppression: true } 
+        const mic = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: true }
         });
         window._micStream = mic;
-        
-        const pc = new RTCPeerConnection({ 
-            iceServers: [{ urls: "stun:stun.l.google.com:19302" }] 
+
+        const pc = new RTCPeerConnection({
+            iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
         });
         window._pc = pc;
-        
+
         const dc = pc.createDataChannel("oai-events");
         window._dc = dc;
-        
-        dc.addEventListener("open", () => { 
-            stopBtn && (stopBtn.disabled = false); 
+
+        dc.addEventListener("open", () => {
+            stopBtn && (stopBtn.disabled = false);
         });
-        
+
         dc.addEventListener("error", (e) => console.error("DataChannel err:", e));
-        
+
         dc.addEventListener("message", (e) => {
             try {
                 const msg = JSON.parse(e.data);
-                
+
                 if (msg?.type && !String(msg.type).includes("audio")) {
-                    console.log("Event:", msg.type);
+                    console.log("Event:", msg.type, msg);
                 }
 
                 if (msg.type === "session.created" && !sessionCreated) {
@@ -177,67 +203,83 @@ async function startVoice() {
                     status && (status.textContent = "Connected");
                 }
 
-                // Save user transcripts only if non-empty
                 if (msg.type === "conversation.item.input_audio_transcription.completed") {
                     const t = (msg.transcript || "").trim();
                     if (t) {
-                        appendMessageToDom("user", t, true); // Save to memory
+                        appendMessageToDom("user", t, true);
                     }
                 }
-                // Resets ny flag when a new response is generated
-                if (msg.type === "response.created") { 
-                    aiStreaming = ""; 
-                    isNewAssistantResponse = true; // Mark as new response
+
+                if (msg.type === "response.created") {
+                    aiStreaming = "";
+                    isNewAssistantResponse = true;
                     currentAssistant = appendMessageToDom("assistant", "", false);
-                    return; 
+                    return;
                 }
-                // Create placeholder without saving to memory
-                if (msg.type === "response.created") { 
-                    aiStreaming = ""; 
-                    currentAssistant = appendMessageToDom("assistant", "", false); // Don't save yet
-                    return; 
-                }
-                
-                // Update streaming in my UI. using the openAI's audio trancription.
-                if (msg.type === "response.audio_transcript.delta") { 
-                    aiStreaming += msg.delta || ""; 
+
+                if (msg.type === "response.audio_transcript.delta") {
+                    aiStreaming += msg.delta || "";
                     if (aiStreaming) {
-                        updateStreaming(currentAssistant, aiStreaming); 
+                        updateStreaming(currentAssistant, aiStreaming);
                     }
-                    return; 
+                    return;
                 }
-                
-                // Finalize and save if there's actual content
-                // Done the streaming and save it to my memory.
+
                 if (msg.type === "response.audio_transcript.done") {
                     const finalText = (msg.transcript || aiStreaming || "").trim();
-                    
+
                     if (finalText) {
-                    if (currentAssistant) {
-                        finalize(currentAssistant, finalText);
-                    } else {
-                    appendMessageToDom("assistant", finalText, true); // Save to memory
-                    }}
-                    else if (currentAssistant && currentAssistant.msgEl) {
-                            currentAssistant.msgEl.remove();}
-                    aiStreaming = ""; 
-                    currentAssistant = null; 
+                        if (currentAssistant) {
+                            finalize(currentAssistant, finalText);
+                        } else {
+                            appendMessageToDom("assistant", finalText, true);
+                        }
+                    } else if (currentAssistant && currentAssistant.msgEl) {
+                        currentAssistant.msgEl.remove();
+                    }
+
+                    aiStreaming = "";
+                    currentAssistant = null;
                     isNewAssistantResponse = true;
                     return;
                 }
-            } catch (err) { 
-                console.warn("Non-JSON message:", e?.data || err); 
+
+                // Handle tool calls
+                if (msg.type === "response.function_call_arguments.done") {
+                    const funcName = msg.name;
+                    const args = JSON.parse(msg.arguments || "{}");
+                    
+                    console.log("Tool call:", funcName, args);
+                    
+                    if (funcName === "verify_information") {
+                        showVerificationPopup(args);
+                        
+                        // Send tool response
+                        dc.send(JSON.stringify({
+                            type: "conversation.item.create",
+                            item: {
+                                type: "function_call_output",
+                                call_id: msg.call_id,
+                                output: JSON.stringify({ status: "popup_shown" })
+                            }
+                        }));
+                    }
+                    return;
+                }
+
+            } catch (err) {
+                console.warn("Non-JSON message:", e?.data || err);
             }
         });
 
         pc.addEventListener("track", (ev) => {
-            if (!remote.srcObject) { 
-                remote.srcObject = ev.streams[0]; 
-                remote.volume = 1; 
+            if (!remote.srcObject) {
+                remote.srcObject = ev.streams[0];
+                remote.volume = 1;
                 remote.muted = false;
                 window._remoteEl = remote;
                 remote.play().catch(() => {
-                    status && (status.textContent = "Connected — click to allow audio"); 
+                    status && (status.textContent = "Connected — click to allow audio");
                     document.addEventListener("click", () => remote.play(), { once: true });
                 });
             }
@@ -260,12 +302,12 @@ async function startVoice() {
 
         status && (status.textContent = "Exchanging SDP...");
         const oaResp = await fetch(
-            `https://api.openai.com/v1/realtime?model=${encodeURIComponent(sess.model)}`, 
+            `https://api.openai.com/v1/realtime?model=${encodeURIComponent(sess.model)}`,
             {
                 method: "POST",
-                headers: { 
-                    Authorization: `Bearer ${ephemeralKey}`, 
-                    "Content-Type": "application/sdp" 
+                headers: {
+                    Authorization: `Bearer ${ephemeralKey}`,
+                    "Content-Type": "application/sdp"
                 },
                 body: pc.localDescription.sdp
             }
@@ -282,74 +324,65 @@ async function startVoice() {
     }
 }
 
-/* -----------------------------
-    Save conversation (simple)
------------------------------- */
 async function saveConversationToServer(sessionId = null) {
-    // Filter out any empty messages before saving
-    const validMessages = conversationMessages.filter(m => 
+    const validMessages = conversationMessages.filter(m =>
         m.content && m.content.trim().length > 0
     );
-    
+
     if (!validMessages.length) {
         toast("No messages to save");
         return null;
     }
-    
+
     try {
-        // Step 1: Save conversation
         $("status") && ($("status").textContent = "Saving conversation...");
-        const saveResp = await fetch("/api/conversation/", { 
-            method: "POST", 
-            headers: { "Content-Type": "application/json" }, 
-            body: JSON.stringify({ 
-                session_id: sessionId, 
-                messages: validMessages 
-            }) 
+        const saveResp = await fetch("/api/conversation/", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                session_id: sessionId,
+                messages: validMessages
+            })
         });
-        
-        if (!saveResp.ok) { 
-            console.error("Save failed:", await saveResp.text()); 
+
+        if (!saveResp.ok) {
+            console.error("Save failed:", await saveResp.text());
             toast("Save failed");
-            return null; 
+            return null;
         }
-        
+
         const saveData = await saveResp.json();
         console.log("Conversation saved:", saveData);
-        
-        // Step 2: Analyze conversation to extract user_response
+
         $("status") && ($("status").textContent = "Analyzing responses...");
         const analyzeResp = await fetch("/api/conversation/analyze", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-                session_id: sessionId 
+            body: JSON.stringify({
+                session_id: sessionId
             })
         });
-        
+
         if (!analyzeResp.ok) {
             console.error("Analysis failed:", await analyzeResp.text());
             toast("Conversation saved but analysis failed");
             return saveData;
         }
-        
+
         const analyzeData = await analyzeResp.json();
         console.log("Analysis completed:", analyzeData);
-        
+
         window._conversationSaved = true;
         toast("Conversation saved & analyzed ✓");
         return { ...saveData, analysis: analyzeData };
-        
-    } catch (err) { 
-        console.error("Save/analyze error:", err); 
-        toast("Error: " + err.message); 
-        return null; 
+
+    } catch (err) {
+        console.error("Save/analyze error:", err);
+        toast("Error: " + err.message);
+        return null;
     }
 }
 
-/* ---------------------------
-    Stop wiring & unload save
----------------------------- */
 (() => {
     const stopBtn = $("stop");
     if (!stopBtn) return;
@@ -416,7 +449,4 @@ async function saveConversationToServer(sessionId = null) {
     });
 })();
 
-/* -------------------------
-    Hook start button
-------------------------- */
 document.getElementById("start")?.addEventListener("click", startVoice);

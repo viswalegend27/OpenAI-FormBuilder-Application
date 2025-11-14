@@ -2,75 +2,151 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>Recent User Responses</title>
+<title>Responses</title>
 {% load static %}
-<link rel="icon" href="{% static 'form_ai/favicon.ico' %}" sizes="any">
+<link rel="icon" href="{% static 'form_ai/favicon.ico' %}">
 <link rel="stylesheet" href="{% static 'form_ai/css/responses.css' %}">
 </head>
 <body>
 <header class="header">
-    <h1>Recent User Responses</h1>
-    <a href="{% url 'voice_page' %}" class="control-btn back-btn">Back to Voice</a>
-    <!-- In the header of responses.html, add: -->
-    <nav class="header-actions" aria-label="Primary actions">
-        <a href="{% url 'manage_forms' %}" class="control-btn">Interview Forms</a>
-        <a href="{% url 'voice_page' %}" class="control-btn">Voice</a>
-    </nav>
+<h1>Interview Responses</h1>
+<nav class="header-actions">
+<a href="{% url 'voice_page' %}" class="control-btn">← Back to Voice</a>
+</nav>
 </header>
 
 <main class="layout">
-    <section class="responses-wrapper">
-    <div class="responses">
-        {% if conversations %}
-        <ul class="responses-list">
-        {% for conv in conversations %}
-        <li class="response-container">
-            <div class="response-meta">
-            <div class="meta-row">
-                <span class="meta-label">Session ID:</span>
-                <span class="meta-value session-id">{{ conv.session_id|default:"N/A" }}</span>
-            </div>
-            <div class="meta-row">
-                <span class="meta-label">Created At:</span>
-                <span class="meta-value created-at">{{ conv.created_at|date:"Y-m-d H:i:s" }}</span>
-            </div>
-            </div>
+{% if conversations %}
+<ul class="responses-list">
+{% for conv in conversations %}
+<li class="response-container">
+<div class="response-meta">
+<div class="meta-row">
+<span class="meta-label">Session:</span>
+<span class="meta-value">{{ conv.session_id|default:"N/A" }}</span>
+</div>
+<div class="meta-row">
+<span class="meta-label">Date:</span>
+<span class="meta-value">{{ conv.created_at|date:"Y-m-d H:i" }}</span>
+</div>
+</div>
 
-            {% if conv.user_response %}
-            <div class="response-data">
-            <strong class="response-data-title">Extracted Responses:</strong>
-            <div class="response-fields">
-                {% for key, value in conv.user_response.items %}
-                <div class="response-field">
-                <span class="response-key">{{ key|title }}:</span>
-                <span class="response-value {% if value %}value-provided{% else %}value-empty{% endif %}">
-                    {{ value|default:"(not provided)" }}
-                </span>
-                </div>
-                {% endfor %}
-            </div>
-            </div>
-            {% else %}
-            <div class="empty-response-note">
-            <p>No extracted responses available</p>
-            </div>
-            {% endif %}
-        </li>
+{% if conv.user_response %}
+<div class="response-data">
+<strong>Candidate Information:</strong>
+<div class="response-fields">
+{% for key, value in conv.user_response.items %}
+<div class="response-field">
+<span class="response-key">{{ key|title }}:</span>
+<span class="response-value">{{ value|default:"N/A" }}</span>
+</div>
+{% endfor %}
+</div>
+</div>
+{% endif %}
 
-        {% if not forloop.last %}
-        <li class="divider" aria-hidden="true"></li>
-        {% endif %}
-        {% endfor %}
-        </ul>
-        {% else %}
-        <div class="empty-state">
-        <p class="empty-title">No analyzed conversations found.</p>
-        <p class="empty-sub">Make sure to complete a conversation and click "Stop" before checking responses.</p>
-        </div>
-        {% endif %}
-    </div>
-    </section>
+<div class="response-actions">
+<button class="control-btn primary generate-assessment-btn" 
+        data-conv-id="{{ conv.id }}">
+    Generate Assessment URL
+</button>
+<div class="assessment-url-display" id="url-display-{{ conv.id }}" style="display:none;">
+<input type="text" readonly class="url-input" />
+<button class="control-btn copy-btn">Copy</button>
+</div>
+{% if conv.assessments.exists %}
+<button class="control-btn view-assessments-btn"
+        data-conv-id="{{ conv.id }}">
+    View Assessments ({{ conv.assessments.count }})
+</button>
+<div class="assessments-list" id="assessments-{{ conv.id }}" style="display:none;">
+{% for assessment in conv.assessments.all %}
+<div class="assessment-item">
+<div><strong>Created:</strong> {{ assessment.created_at|date:"Y-m-d H:i" }}</div>
+<div><strong>Status:</strong> {{ assessment.completed|yesno:"Completed,Pending" }}</div>
+{% if assessment.answers %}
+<div class="assessment-answers">
+{% for key, value in assessment.answers.items %}
+<div><strong>{{ key }}:</strong> {{ value }}</div>
+{% endfor %}
+</div>
+{% endif %}
+</div>
+{% endfor %}
+</div>
+{% endif %}
+</div>
+</li>
+{% endfor %}
+</ul>
+{% else %}
+<div class="empty-state">
+<h3>No Responses Yet</h3>
+<p>Complete a voice interview to see responses here.</p>
+</div>
+{% endif %}
 </main>
 
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // Generate Assessment
+    document.querySelectorAll('.generate-assessment-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const convId = e.target.dataset.convId;
+            btn.disabled = true;
+            btn.textContent = 'Generating...';
+            
+            try {
+                const resp = await fetch(`/responses/${convId}/generate-assessment/`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'}
+                });
+                
+                if (!resp.ok) throw new Error('Failed to generate');
+                
+                const data = await resp.json();
+                const urlDisplay = document.getElementById(`url-display-${convId}`);
+                const input = urlDisplay.querySelector('.url-input');
+                
+                input.value = data.assessment_url;
+                urlDisplay.style.display = 'flex';
+                btn.textContent = 'Generated ✓';
+                
+            } catch (err) {
+                alert('Error: ' + err.message);
+                btn.disabled = false;
+                btn.textContent = 'Generate Assessment URL';
+            }
+        });
+    });
+    
+    // Copy URL
+    document.querySelectorAll('.copy-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const input = e.target.previousElementSibling;
+            input.select();
+            document.execCommand('copy');
+            btn.textContent = 'Copied!';
+            setTimeout(() => btn.textContent = 'Copy', 2000);
+        });
+    });
+    
+    // View Assessments
+    document.querySelectorAll('.view-assessments-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const convId = e.target.dataset.convId;
+            const list = document.getElementById(`assessments-${convId}`);
+            
+            if (list.style.display === 'none') {
+                list.style.display = 'block';
+                btn.textContent = 'Hide Assessments';
+            } else {
+                list.style.display = 'none';
+                btn.textContent = btn.textContent.replace('Hide', 'View');
+            }
+        });
+    });
+});
+</script>
 </body>
 </html>
