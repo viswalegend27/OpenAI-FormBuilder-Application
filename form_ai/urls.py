@@ -11,4 +11,6 @@ urlpatterns = [
     path("assessment/<uuid:assessment_id>/", views.conduct_assessment, name="conduct_assessment"),
     path("assessment/<uuid:assessment_id>/save/", views.save_assessment, name="save_assessment"),
     path("assessment/<uuid:assessment_id>/analyze/", views.analyze_assessment, name="analyze_assessment"),
+    path('responses/<int:conv_id>/edit/', views.edit_response, name='edit_responses'),
+    path('responses/<int:conv_id>/delete/', views.delete_response, name='delete_responses'),
 ]
