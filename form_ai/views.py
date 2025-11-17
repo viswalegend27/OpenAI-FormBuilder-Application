@@ -1,8 +1,3 @@
-"""
-Django views for voice-assistant form builder.
-Handles realtime sessions, conversations, and assessments.
-"""
-
 import json
 import logging
 import os
