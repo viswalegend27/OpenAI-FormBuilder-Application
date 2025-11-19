@@ -1,11 +1,13 @@
-async function waitForIceGathering(pc, timeout = 3000) {
-    if (pc.iceGatheringState === "complete") return;
-    return new Promise((res) => {
-        const done = () => { pc.removeEventListener("icegatheringstatechange", done); clearTimeout(timer); res(); };
-        const timer = setTimeout(() => { pc.removeEventListener("icegatheringstatechange", done); res(); }, timeout);
-        pc.addEventListener("icegatheringstatechange", done);
-    });
-}
+/**
+ * ============================================================
+ * ASSESSMENT INTERVIEW - WebRTC Voice Interface
+ * Optimized Production Version
+ * ============================================================
+ */
+
+// ============================================================
+// GLOBAL STATE
+// ============================================================
 
 window.currentSessionId = null;
 window._pc = null;
@@ -14,33 +16,17 @@ window._micStream = null;
 window._remoteEl = null;
 
 const conversationMessages = [];
+const qaMapping = {};
+
 let isNewAssistantResponse = true;
+let currentQuestionIndex = 0; // Track which question we're on (0, 1, 2)
+let sessionCreated = false;
 
-const pushMessage = (role, text) => {
-    if (!text || !text.trim()) return;
-    conversationMessages.push({
-        role,
-        content: text.trim(),
-        ts: new Date().toISOString()
-    });
-};
+console.log("%c🎙️ ASSESSMENT READY", "color: #00ff00; font-size: 16px; font-weight: bold");
 
-const updateLastAssistant = (text) => {
-    if (!text || !text.trim()) return;
-    if (isNewAssistantResponse) {
-        pushMessage("assistant", text);
-        isNewAssistantResponse = false;
-        return;
-    }
-    for (let i = conversationMessages.length - 1; i >= 0; i--) {
-        if (conversationMessages[i].role === "assistant") {
-            conversationMessages[i].content = text.trim();
-            conversationMessages[i].ts = new Date().toISOString();
-            return;
-        }
-    }
-    pushMessage("assistant", text);
-};
+// ============================================================
+// UTILITIES
+// ============================================================
 
 const $ = (id) => document.getElementById(id);
 let toastTimer;
@@ -55,11 +41,62 @@ function toast(msg, ms = 3000) {
         if (ms <= 0) return resolve();
         toastTimer = setTimeout(() => {
             t.classList.remove("show");
-            toastTimer = null;
             resolve();
         }, ms);
     });
 }
+
+async function waitForIceGathering(pc, timeout = 3000) {
+    if (pc.iceGatheringState === "complete") return;
+    return new Promise((res) => {
+        const done = () => {
+            pc.removeEventListener("icegatheringstatechange", done);
+            clearTimeout(timer);
+            res();
+        };
+        const timer = setTimeout(() => {
+            pc.removeEventListener("icegatheringstatechange", done);
+            res();
+        }, timeout);
+        pc.addEventListener("icegatheringstatechange", done);
+    });
+}
+
+// ============================================================
+// MESSAGE MANAGEMENT
+// ============================================================
+
+const pushMessage = (role, text) => {
+    if (!text || !text.trim()) return;
+    conversationMessages.push({
+        role,
+        content: text.trim(),
+        ts: new Date().toISOString()
+    });
+};
+
+const updateLastAssistant = (text) => {
+    if (!text || !text.trim()) return;
+    
+    if (isNewAssistantResponse) {
+        pushMessage("assistant", text);
+        isNewAssistantResponse = false;
+        return;
+    }
+    
+    for (let i = conversationMessages.length - 1; i >= 0; i--) {
+        if (conversationMessages[i].role === "assistant") {
+            conversationMessages[i].content = text.trim();
+            conversationMessages[i].ts = new Date().toISOString();
+            return;
+        }
+    }
+    pushMessage("assistant", text);
+};
+
+// ============================================================
+// DOM RENDERING
+// ============================================================
 
 const appendMessageToDom = (role, text = "", saveToMemory = true) => {
     const conv = $("conversation");
@@ -113,14 +150,48 @@ const finalize = (el, text) => {
     el.msgEl.scrollIntoView({ block: "end", behavior: "smooth" });
 };
 
+// ============================================================
+// QUESTION TRACKING (Simple & Reliable)
+// ============================================================
+
+function isLikelyQuestion(text) {
+    const lower = text.toLowerCase();
+    const questionIndicators = [
+        'question',
+        'what is',
+        'what are',
+        'how does',
+        'explain',
+        'describe',
+        'can you tell',
+        'moving on',
+        "let's move"
+    ];
+    
+    return questionIndicators.some(indicator => lower.includes(indicator));
+}
+
+// ============================================================
+// WEBRTC SESSION
+// ============================================================
+
 async function startAssessment() {
-    const status = $("status"), remote = $("remote"), stopBtn = $("stop");
-    let currentAssistant = null, aiStreaming = "", sessionCreated = false;
+    const status = $("status");
+    const remote = $("remote");
+    const stopBtn = $("stop");
+    
+    let currentAssistant = null;
+    let aiStreaming = "";
 
     try {
         status && (status.textContent = "Requesting microphone...");
+        
         const mic = await navigator.mediaDevices.getUserMedia({
-            audio: { echoCancellation: true, noiseSuppression: true }
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+            }
         });
         window._micStream = mic;
 
@@ -132,33 +203,52 @@ async function startAssessment() {
         const dc = pc.createDataChannel("oai-events");
         window._dc = dc;
 
+        // ========================================================
+        // DATA CHANNEL EVENTS
+        // ========================================================
+
         dc.addEventListener("open", () => {
+            console.log("%c[✓] Connected", "color: #00ff00; font-weight: bold");
             stopBtn && (stopBtn.disabled = false);
         });
 
-        dc.addEventListener("error", (e) => console.error("DataChannel err:", e));
+        dc.addEventListener("error", (e) => {
+            console.error("[✗] Connection error:", e);
+            toast("Connection error");
+        });
 
         dc.addEventListener("message", (e) => {
             try {
                 const msg = JSON.parse(e.data);
 
-                if (msg?.type && !String(msg.type).includes("audio")) {
-                    console.log("Event:", msg.type);
-                }
-
+                // ===== SESSION CREATED =====
                 if (msg.type === "session.created" && !sessionCreated) {
                     sessionCreated = true;
                     dc.send(JSON.stringify({ type: "response.create" }));
-                    status && (status.textContent = "Connected - Assessment started");
+                    status && (status.textContent = "Assessment in progress");
+                    console.log("%c[✓] Session started", "color: #00ff00; font-weight: bold");
                 }
 
+                // ===== USER SPOKE =====
                 if (msg.type === "conversation.item.input_audio_transcription.completed") {
-                    const t = (msg.transcript || "").trim();
-                    if (t) {
-                        appendMessageToDom("user", t, true);
+                    const transcript = (msg.transcript || "").trim();
+                    
+                    if (transcript) {
+                        appendMessageToDom("user", transcript, true);
+                        
+                        // Assign to current question sequentially
+                        const qKey = `q${currentQuestionIndex + 1}`;
+                        
+                        if (currentQuestionIndex < 3 && !qaMapping[qKey]) {
+                            qaMapping[qKey] = transcript;
+                            console.log(`%c[✓] ${qKey} = "${transcript.substring(0, 60)}..."`, 
+                                "color: #00ff00; font-weight: bold; font-size: 12px");
+                            currentQuestionIndex++;
+                        }
                     }
                 }
 
+                // ===== ASSISTANT STARTS =====
                 if (msg.type === "response.created") {
                     aiStreaming = "";
                     isNewAssistantResponse = true;
@@ -166,14 +256,16 @@ async function startAssessment() {
                     return;
                 }
 
+                // ===== ASSISTANT STREAMING =====
                 if (msg.type === "response.audio_transcript.delta") {
                     aiStreaming += msg.delta || "";
-                    if (aiStreaming) {
+                    if (aiStreaming && currentAssistant) {
                         updateStreaming(currentAssistant, aiStreaming);
                     }
                     return;
                 }
 
+                // ===== ASSISTANT DONE =====
                 if (msg.type === "response.audio_transcript.done") {
                     const finalText = (msg.transcript || aiStreaming || "").trim();
 
@@ -182,6 +274,12 @@ async function startAssessment() {
                             finalize(currentAssistant, finalText);
                         } else {
                             appendMessageToDom("assistant", finalText, true);
+                        }
+                        
+                        // Log if this looks like a question
+                        if (isLikelyQuestion(finalText)) {
+                            console.log(`%c[→] Waiting for Q${currentQuestionIndex + 1} answer...`, 
+                                "color: #ffaa00; font-weight: bold");
                         }
                     } else if (currentAssistant && currentAssistant.msgEl) {
                         currentAssistant.msgEl.remove();
@@ -192,10 +290,21 @@ async function startAssessment() {
                     isNewAssistantResponse = true;
                     return;
                 }
+
+                // ===== ERROR =====
+                if (msg.type === "error") {
+                    console.error("[✗] OpenAI error:", msg);
+                    toast("Session error occurred");
+                }
+
             } catch (err) {
-                console.warn("Non-JSON message:", e?.data || err);
+                // Ignore non-JSON messages
             }
         });
+
+        // ========================================================
+        // PEER CONNECTION
+        // ========================================================
 
         pc.addEventListener("track", (ev) => {
             if (!remote.srcObject) {
@@ -203,37 +312,57 @@ async function startAssessment() {
                 remote.volume = 1;
                 remote.muted = false;
                 window._remoteEl = remote;
+                
                 remote.play().catch(() => {
-                    status && (status.textContent = "Connected — click to allow audio");
+                    status && (status.textContent = "Click anywhere to enable audio");
                     document.addEventListener("click", () => remote.play(), { once: true });
                 });
             }
         });
 
+        pc.addEventListener("iceconnectionstatechange", () => {
+            if (pc.iceConnectionState === "failed" || pc.iceConnectionState === "disconnected") {
+                toast("Connection lost", 5000);
+            }
+        });
+
+        // ========================================================
+        // SETUP
+        // ========================================================
+
         mic.getAudioTracks().forEach(t => pc.addTrack(t, mic));
 
-        status && (status.textContent = "Creating offer...");
+        status && (status.textContent = "Creating connection...");
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         await waitForIceGathering(pc, 3000);
 
-        // Create assessment session with custom instructions
+        // ========================================================
+        // CREATE SESSION
+        // ========================================================
+
         status && (status.textContent = "Getting session...");
         const sessResp = await fetch("/api/session", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 assessment_mode: true,
-                qualification: window.USER_INFO.qualification,
-                experience: window.USER_INFO.experience
+                qualification: window.USER_INFO?.qualification || "",
+                experience: window.USER_INFO?.experience || ""
             })
         });
-        
-        if (!sessResp.ok) throw new Error(await sessResp.text());
+
+        if (!sessResp.ok) throw new Error("Session creation failed");
+
         const sess = await sessResp.json();
         window.currentSessionId = sess?.id || null;
         const ephemeralKey = sess?.client_secret?.value;
+        
         if (!ephemeralKey) throw new Error("No ephemeral key");
+
+        // ========================================================
+        // CONNECT TO OPENAI
+        // ========================================================
 
         status && (status.textContent = "Connecting...");
         const oaResp = await fetch(
@@ -247,31 +376,78 @@ async function startAssessment() {
                 body: pc.localDescription.sdp
             }
         );
-        if (!oaResp.ok) throw new Error(await oaResp.text());
+
+        if (!oaResp.ok) throw new Error("OpenAI connection failed");
+
         const answerSdp = await oaResp.text();
         await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
 
-        status && (status.textContent = "Assessment in progress");
+        status && (status.textContent = "Connected");
+        console.log("%c[✓] Assessment active", "color: #00ff00; font-size: 14px; font-weight: bold");
+
     } catch (err) {
-        console.error("startAssessment err:", err);
-        $("status") && ($("status").textContent = "Error: " + (err?.message || err));
-        toast("Error: " + (err?.message || "Unknown"));
+        console.error("%c[✗] Error:", "color: #ff0000; font-weight: bold", err.message);
+        $("status") && ($("status").textContent = `Error: ${err.message}`);
+        toast(`Error: ${err.message}`, 5000);
+        cleanupResources();
     }
 }
 
+// ============================================================
+// CLEANUP
+// ============================================================
+
+function cleanupResources() {
+    try {
+        if (window._micStream?.getTracks) {
+            window._micStream.getTracks().forEach(t => t.stop());
+            window._micStream = null;
+        }
+    } catch (e) {}
+
+    try {
+        const remoteEl = window._remoteEl || $("remote");
+        if (remoteEl) {
+            remoteEl.pause?.();
+            remoteEl.srcObject = null;
+            window._remoteEl = null;
+        }
+    } catch (e) {}
+
+    try {
+        window._dc?.close?.();
+        window._dc = null;
+    } catch (e) {}
+
+    try {
+        window._pc?.getSenders?.().forEach(s => s.track?.stop?.());
+        window._pc?.close?.();
+        window._pc = null;
+    } catch (e) {}
+}
+
+// ============================================================
+// SAVE ASSESSMENT
+// ============================================================
+
 async function saveAssessmentToServer(assessmentId, sessionId = null) {
-    const validMessages = conversationMessages.filter(m =>
-        m.content && m.content.trim().length > 0
-    );
+    const validMessages = conversationMessages
+        .filter(m => m.content && m.content.trim())
+        .sort((a, b) => new Date(a.ts) - new Date(b.ts));
 
     if (!validMessages.length) {
         toast("No conversation to save");
         return null;
     }
 
-    try {
-        $("status") && ($("status").textContent = "Saving assessment...");
+    console.log("%c[SAVE] Starting...", "color: #00aaff; font-weight: bold");
+    console.log(`[SAVE] Messages: ${validMessages.length}, Answers: ${Object.keys(qaMapping).length}`);
+    console.log("[SAVE] Q&A Mapping:", qaMapping);
 
+    try {
+        $("status") && ($("status").textContent = "Saving...");
+
+        // Save messages
         const saveResp = await fetch(`/assessment/${assessmentId}/save/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -282,44 +458,52 @@ async function saveAssessmentToServer(assessmentId, sessionId = null) {
         });
 
         if (!saveResp.ok) {
-            console.error("Save failed:", await saveResp.text());
+            console.error("[✗] Save failed");
             toast("Save failed");
             return null;
         }
 
         const saveData = await saveResp.json();
-        console.log("Assessment saved:", saveData);
+        console.log("%c[✓] Saved", "color: #00ff00");
 
-        $("status") && ($("status").textContent = "Analyzing responses...");
+        // Analyze answers
+        $("status") && ($("status").textContent = "Analyzing...");
+        
         const analyzeResp = await fetch(`/assessment/${assessmentId}/analyze/`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" }
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ qa_mapping: qaMapping })
         });
 
         if (!analyzeResp.ok) {
-            console.error("Analysis failed:", await analyzeResp.text());
-            toast("Assessment saved but analysis failed");
+            console.error("[✗] Analysis failed");
+            toast("Saved but analysis failed", 4000);
             return saveData;
         }
 
         const analyzeData = await analyzeResp.json();
-        console.log("Analysis completed:", analyzeData);
+        console.log("%c[✓] Analysis complete", "color: #00ff00");
+        console.log("[SAVE] Final answers:", analyzeData.answers);
 
         toast("Assessment completed ✓", 2000);
 
         setTimeout(() => {
-            $("status") && ($("status").textContent = "Assessment completed - Thank you!");
+            $("status") && ($("status").textContent = "Completed!");
             showCompletionMessage();
         }, 2000);
 
         return { ...saveData, analysis: analyzeData };
 
     } catch (err) {
-        console.error("Save/analyze error:", err);
-        toast("Error: " + err.message);
+        console.error("%c[✗] Save error:", "color: #ff0000", err.message);
+        toast(`Error: ${err.message}`, 5000);
         return null;
     }
 }
+
+// ============================================================
+// COMPLETION UI
+// ============================================================
 
 function showCompletionMessage() {
     const conv = $("conversation");
@@ -331,6 +515,7 @@ function showCompletionMessage() {
         <div class="completion-content">
             <h3>✓ Assessment Completed</h3>
             <p>Thank you for completing the technical assessment!</p>
+            <p class="sub-text">Your responses have been recorded.</p>
             <p class="sub-text">You may now close this window.</p>
         </div>
     `;
@@ -338,72 +523,52 @@ function showCompletionMessage() {
     conv.scrollTop = conv.scrollHeight;
 }
 
+// ============================================================
+// EVENT LISTENERS
+// ============================================================
+
+document.getElementById("start")?.addEventListener("click", () => {
+    const startBtn = $("start");
+    if (startBtn) {
+        startBtn.disabled = true;
+        startBtn.textContent = "Starting...";
+    }
+    startAssessment();
+});
+
 (() => {
     const stopBtn = $("stop");
-    if (!stopBtn) return;
-    if (stopBtn._wired) return;
+    if (!stopBtn || stopBtn._wired) return;
     stopBtn._wired = true;
 
     stopBtn.addEventListener("click", async () => {
+        console.log("%c[STOP] Ending assessment", "color: #ffaa00; font-weight: bold");
+        
         stopBtn.disabled = true;
-        $("status") && ($("status").textContent = "Ending assessment...");
+        $("status") && ($("status").textContent = "Ending...");
 
         try {
-            if (window._dc && window._dc.readyState === "open") {
+            if (window._dc?.readyState === "open") {
                 window._dc.send(JSON.stringify({ type: "session.disconnect" }));
             }
-        } catch (e) {
-            console.warn("dc notify failed", e);
-        }
+        } catch (e) {}
 
-        try {
-            const mic = window._micStream;
-            if (mic && mic.getTracks) {
-                mic.getTracks().forEach((t) => t.stop());
-                window._micStream = null;
-            }
-        } catch (e) {
-            console.warn("stop mic failed", e);
-        }
-
-        try {
-            const remoteEl = window._remoteEl || $("remote");
-            if (remoteEl) {
-                remoteEl.pause?.();
-                remoteEl.srcObject = null;
-                remoteEl.removeAttribute?.("src");
-                window._remoteEl = null;
-            }
-        } catch (e) {
-            console.warn("clear remote failed", e);
-        }
-
-        try {
-            if (window._dc) {
-                window._dc.close?.();
-                window._dc = null;
-            }
-        } catch (e) {
-            console.warn("close dc failed", e);
-        }
-
-        try {
-            if (window._pc) {
-                window._pc.getSenders?.().forEach((s) => s.track?.stop?.());
-                window._pc.close?.();
-                window._pc = null;
-            }
-        } catch (e) {
-            console.warn("close pc failed", e);
-        }
+        cleanupResources();
 
         const assessmentId = window.ASSESSMENT_ID;
         if (assessmentId) {
             await saveAssessmentToServer(assessmentId, window.currentSessionId);
         } else {
-            toast("Error: No assessment ID found");
+            toast("Error: No assessment ID", 5000);
+            console.error("[✗] No assessment ID");
         }
     });
 })();
 
-document.getElementById("start")?.addEventListener("click", startAssessment);
+// ============================================================
+// INIT
+// ============================================================
+
+console.log("Assessment ID:", window.ASSESSMENT_ID);
+console.log("Questions:", window.ASSESSMENT_QUESTIONS);
+console.log("User:", window.USER_INFO);

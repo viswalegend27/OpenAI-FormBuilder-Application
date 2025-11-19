@@ -20,7 +20,6 @@ from .views_schema_ import build_dynamic_schema, build_extractor_messages
 
 logger = logging.getLogger(__name__)
 
-
 # ============================================================================
 # Constants
 # ============================================================================
@@ -110,9 +109,7 @@ def create_realtime_session(request):
         data = post_json(OPENAI_REALTIME_URL, headers, payload, timeout=20)
 
         if not data.get("client_secret", {}).get("value"):
-            logger.warning(
-                "Session created but client_secret.value is missing"
-            )
+            logger.warning("Session created but client_secret.value is missing")
 
         return json_ok({
             "id": data.get("id"),
@@ -130,7 +127,6 @@ def _get_session_payload(request) -> Dict[str, Any]:
     if request.method == "POST":
         body = safe_json_parse(request.body)
         if body.get("assessment_mode"):
-            # Assessment mode: use custom persona, no tools
             qual = body.get("qualification", "")
             exp = body.get("experience", "")
             payload["instructions"] = C.get_assessment_persona(qual, exp)
@@ -207,17 +203,7 @@ def _analyze_user_responses(
     api_key: str,
     keys: List[str]
 ) -> Dict[str, Any]:
-    """
-    Analyze conversation messages and extract structured data.
-
-    Args:
-        messages: List of conversation messages
-        api_key: OpenAI API key
-        keys: Fields to extract from conversation
-
-    Returns:
-        Dictionary with extracted data
-    """
+    """Analyze conversation messages and extract structured data."""
     headers = get_openai_headers(api_key)
     json_schema = build_dynamic_schema(keys)
 
@@ -236,7 +222,6 @@ def _analyze_user_responses(
     try:
         content = data["choices"][0]["message"]["content"]
         parsed = json.loads(content)
-        # Ensure all keys exist
         return {k: parsed.get(k, "") for k in keys}
     except (KeyError, json.JSONDecodeError, IndexError) as e:
         logger.warning(f"Failed to parse analysis response: {e}")
@@ -261,20 +246,14 @@ def generate_assessment(request, conv_id):
         experience = conv.user_response.get("experience", "")
 
         api_key = require_env("OPENAI_API_KEY")
-        questions = _generate_expertise_questions(
-            qualification,
-            experience,
-            api_key
-        )
+        questions = _generate_expertise_questions(qualification, experience, api_key)
 
         assessment = Assessment.objects.create(
             conversation=conv,
             questions=questions
         )
 
-        assessment_url = request.build_absolute_uri(
-            f"/assessment/{assessment.id}/"
-        )
+        assessment_url = request.build_absolute_uri(f"/assessment/{assessment.id}/")
 
         return json_ok({
             "assessment_id": str(assessment.id),
@@ -283,11 +262,7 @@ def generate_assessment(request, conv_id):
         })
     except Exception as exc:
         logger.exception("Failed generating assessment")
-        return json_fail(
-            "Failed to generate assessment",
-            status=500,
-            details=str(exc)
-        )
+        return json_fail("Failed to generate assessment", status=500, details=str(exc))
 
 
 @csrf_exempt
@@ -302,6 +277,8 @@ def save_assessment(request, assessment_id):
         if not isinstance(messages, list):
             return json_fail("Invalid messages", status=400)
 
+        logger.info(f"✓ Assessment {assessment_id}: Saved {len(messages)} messages")
+        
         assessment.messages = messages
         assessment.save(update_fields=["messages", "updated_at"])
 
@@ -317,14 +294,30 @@ def analyze_assessment(request, assessment_id):
     """Analyze assessment responses and extract answers."""
     try:
         assessment = get_object_or_404(Assessment, id=assessment_id)
-        api_key = require_env("OPENAI_API_KEY")
-
-        answers = _extract_assessment_answers(
-            assessment.messages,
-            assessment.questions,
-            api_key
-        )
-
+        body = safe_json_parse(request.body)
+        
+        logger.info(f"[ANALYZE] Assessment {assessment_id}")
+        
+        # Get direct Q&A mapping from frontend
+        qa_mapping = body.get('qa_mapping', {})
+        
+        if qa_mapping and isinstance(qa_mapping, dict) and any(qa_mapping.values()):
+            logger.info(f"[ANALYZE] Using direct mapping: {qa_mapping}")
+            answers = {
+                f"q{i+1}": qa_mapping.get(f"q{i+1}", "")
+                for i in range(len(assessment.questions))
+            }
+        else:
+            logger.info(f"[ANALYZE] Extracting from {len(assessment.messages)} messages")
+            api_key = require_env("OPENAI_API_KEY")
+            answers = _extract_assessment_answers(
+                assessment.messages,
+                assessment.questions,
+                api_key
+            )
+        
+        logger.info(f"[ANALYZE] ✓ Final answers: {answers}")
+        
         assessment.answers = answers
         assessment.completed = True
         assessment.save(update_fields=["answers", "completed", "updated_at"])
@@ -347,17 +340,110 @@ def _generate_expertise_questions(
     experience: str,
     api_key: str
 ) -> List[Dict[str, str]]:
-    """
-    Generate technical questions based on qualification and experience.
+    """Generate technical questions based on qualification and experience."""
+    headers = get_openai_headers(api_key)
 
-    Args:
-        qualification: User's qualification
-        experience: User's experience
-        api_key: OpenAI API key
+    prompt = (
+        f"Generate exactly 3 technical interview questions for a candidate with:\n"
+        f"- Qualification: {qualification}\n"
+        f"- Experience: {experience}\n\n"
+        f"Questions should be:\n"
+        f"1. One fundamental concept question\n"
+        f"2. One practical/scenario-based question\n"
+        f"3. One advanced/problem-solving question\n\n"
+        f'Return as JSON array: [{{"q": "question text"}}]'
+    )
 
-    Returns:
-        List of question dictionaries
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.7
+    }
+
+    try:
+        data = post_json(OPENAI_CHAT_URL, headers, payload, timeout=20)
+        content = data["choices"][0]["message"]["content"]
+        questions = parse_json_from_response(content)
+        return questions[:3]
+    except Exception as e:
+        logger.warning(f"Question generation failed: {e}")
+        return [
+            {"q": "Explain a fundamental concept in your field"},
+            {"q": "Describe a practical project you've worked on"},
+            {"q": "How would you solve a complex technical challenge?"}
+        ]
+
+
+def _extract_assessment_answers(
+    messages: List[Dict],
+    questions: List[Dict],
+    api_key: str
+) -> Dict[str, str]:
     """
+    Extract answers from messages using AI.
+    Called only when frontend doesn't send direct mapping.
+    """
+    logger.info("[EXTRACT] Starting AI extraction")
+    
+    headers = get_openai_headers(api_key)
+    
+    # Sort messages by timestamp
+    sorted_messages = sorted(messages, key=lambda m: m.get('ts', ''))
+    
+    # Build conversation
+    conversation_text = "\n".join([
+        f"{m.get('role', 'unknown').upper()}: {m.get('content', '')}"
+        for m in sorted_messages
+    ])
+    
+    # Build questions
+    questions_text = "\n".join([
+        f"Q{i+1}: {q['q']}" for i, q in enumerate(questions)
+    ])
+    
+    prompt = f"""Extract the candidate's answers from this interview.
+
+QUESTIONS:
+{questions_text}
+
+CONVERSATION:
+{conversation_text}
+
+INSTRUCTIONS:
+- Extract only USER's substantive answers
+- Match answers to questions in order
+- Ignore trailing "I don't know" or incomplete responses
+- Return empty string if not answered
+
+Return JSON: {{"q1": "answer", "q2": "answer", "q3": "answer"}}"""
+
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.1
+    }
+
+    try:
+        data = post_json(OPENAI_CHAT_URL, headers, payload, timeout=30)
+        content = data["choices"][0]["message"]["content"]
+        result = parse_json_from_response(content)
+        logger.info(f"[EXTRACT] ✓ Extracted: {result}")
+        return result
+    except Exception as e:
+        logger.error(f"[EXTRACT] ✗ Failed: {e}")
+        return {"q1": "", "q2": "", "q3": ""}
+
+
+# ============================================================================
+# Assessment Helper Functions
+# ============================================================================
+
+def _generate_expertise_questions(
+    qualification: str,
+    experience: str,
+    api_key: str
+) -> List[Dict[str, str]]:
+    """Generate technical questions based on qualification and experience."""
     headers = get_openai_headers(api_key)
 
     prompt = (
@@ -379,7 +465,7 @@ def _generate_expertise_questions(
         data = post_json(OPENAI_CHAT_URL, headers, payload, timeout=20)
         content = data["choices"][0]["message"]["content"]
         questions = parse_json_from_response(content)
-        return questions[:3]  # Ensure only 3 questions
+        return questions[:3]
     except (KeyError, json.JSONDecodeError, IndexError, AppError) as e:
         logger.warning(f"Failed to generate questions: {e}")
         return _get_fallback_questions()
@@ -392,32 +478,102 @@ def _extract_assessment_answers(
 ) -> Dict[str, str]:
     """
     Extract user answers from assessment conversation.
-
-    Args:
-        messages: Conversation messages
-        questions: Assessment questions
-        api_key: OpenAI API key
-
-    Returns:
-        Dictionary mapping question IDs to answers
+    Uses pattern matching first, then AI extraction as fallback.
     """
+    logger.info(f"[EXTRACT] Starting extraction for {len(questions)} questions")
+    logger.info(f"[EXTRACT] Messages count: {len(messages)}")
+    
+    # Sort messages by timestamp
+    sorted_messages = sorted(messages, key=lambda m: m.get('ts', ''))
+    
+    logger.info(f"[EXTRACT] Sorted messages:")
+    for i, msg in enumerate(sorted_messages):
+        logger.info(f"  [{i}] {msg.get('role')}: {msg.get('content', '')[:100]}")
+    
+    # Try pattern matching first
+    answers = {}
+    
+    for q_idx, question in enumerate(questions):
+        q_key = f"q{q_idx + 1}"
+        q_text = question.get('q', '').lower()
+        
+        logger.info(f"[EXTRACT] Looking for Q{q_idx + 1}: {q_text[:50]}...")
+        
+        # Find question in messages
+        for i, msg in enumerate(sorted_messages):
+            if msg.get('role') == 'assistant':
+                content_lower = msg.get('content', '').lower()
+                
+                # Check if this message contains the question
+                # Match key words from question
+                key_words = [w for w in q_text.split() if len(w) > 4]
+                matches = sum(1 for word in key_words if word in content_lower)
+                
+                if matches >= min(3, len(key_words)):
+                    logger.info(f"[EXTRACT] Found question at index {i}")
+                    
+                    # Get next user message
+                    for j in range(i + 1, len(sorted_messages)):
+                        if sorted_messages[j].get('role') == 'user':
+                            answer = sorted_messages[j].get('content', '').strip()
+                            answers[q_key] = answer
+                            logger.info(f"[EXTRACT] Found answer: {answer[:100]}")
+                            break
+                    break
+    
+    # If pattern matching found answers, return them
+    if any(answers.values()):
+        logger.info(f"[EXTRACT] Pattern matching successful: {answers}")
+        return {f"q{i+1}": answers.get(f"q{i+1}", "") for i in range(len(questions))}
+    
+    # Fallback to AI extraction
+    logger.info("[EXTRACT] Pattern matching failed, using AI extraction")
+    return _ai_extract_answers(sorted_messages, questions, api_key)
+
+
+def _ai_extract_answers(
+    messages: List[Dict],
+    questions: List[Dict],
+    api_key: str
+) -> Dict[str, str]:
+    """Use AI to extract answers when pattern matching fails."""
+    logger.info("[AI_EXTRACT] Starting AI extraction")
+    
     headers = get_openai_headers(api_key)
-
-    conversation_text = "\n".join([
-        f"{m['role']}: {m['content']}" for m in messages
-    ])
-
+    
+    # Build conversation text
+    conversation_lines = []
+    for msg in messages:
+        role = msg.get('role', 'unknown').upper()
+        content = msg.get('content', '')
+        conversation_lines.append(f"{role}: {content}")
+    
+    conversation_text = "\n".join(conversation_lines)
+    
+    # Build questions text
     questions_text = "\n".join([
-        f"Q{i+1}: {q['q']}" for i, q in enumerate(questions)
+        f"Question {i+1}: {q['q']}" for i, q in enumerate(questions)
     ])
+    
+    prompt = f"""Extract the candidate's answers from this technical interview.
 
-    prompt = (
-        f"Extract the user's answers to these questions from the "
-        f"conversation:\n\n{questions_text}\n\nConversation:\n"
-        f"{conversation_text}\n\n"
-        f'Return JSON: {{"q1": "answer", "q2": "answer", "q3": "answer"}}'
-    )
+QUESTIONS ASKED:
+{questions_text}
 
+CONVERSATION:
+{conversation_text}
+
+INSTRUCTIONS:
+- Extract only the USER's substantive answers to each question
+- Match answers in chronological order
+- Ignore phrases like "I don't know" that appear after real answers
+- If a question wasn't answered substantively, use empty string
+
+Return JSON object with keys q1, q2, q3:
+{{"q1": "answer text", "q2": "answer text", "q3": "answer text"}}"""
+
+    logger.info(f"[AI_EXTRACT] Prompt:\n{prompt[:500]}...")
+    
     payload = {
         "model": "gpt-4o-mini",
         "messages": [{"role": "user", "content": prompt}],
@@ -425,24 +581,38 @@ def _extract_assessment_answers(
     }
 
     try:
-        data = post_json(OPENAI_CHAT_URL, headers, payload, timeout=20)
+        data = post_json(OPENAI_CHAT_URL, headers, payload, timeout=30)
         content = data["choices"][0]["message"]["content"]
-        return parse_json_from_response(content)
+        
+        logger.info(f"[AI_EXTRACT] Raw response: {content}")
+        
+        result = parse_json_from_response(content)
+        logger.info(f"[AI_EXTRACT] Parsed result: {result}")
+        
+        return result
     except (KeyError, json.JSONDecodeError, IndexError, AppError) as e:
-        logger.warning(f"Failed to extract answers: {e}")
+        logger.error(f"[AI_EXTRACT] Failed: {e}")
         return {"q1": "", "q2": "", "q3": ""}
+
+
+def _get_fallback_questions() -> List[Dict[str, str]]:
+    """Return fallback questions when generation fails."""
+    return [
+        {"q": "Explain a fundamental concept in your field"},
+        {"q": "Describe a practical project you've worked on"},
+        {"q": "How would you solve a complex technical challenge?"}
+    ]
+
 
 @csrf_exempt
 def view_response(request, conv_id):
     """View full response details."""
     try:
         conv = get_object_or_404(Conversation, id=conv_id)
-        
-        # Calculate response number
         response_number = Conversation.objects.filter(
             created_at__lte=conv.created_at
         ).count()
-        
+
         return json_ok({
             "response_number": response_number,
             "created_at": conv.created_at.strftime("%B %d, %Y - %H:%M"),
@@ -462,14 +632,14 @@ def edit_response(request, conv_id):
     try:
         conv = get_object_or_404(Conversation, id=conv_id)
         body = safe_json_parse(request.body)
-        
+
         user_response = body.get("user_response", {})
         if not isinstance(user_response, dict):
             return json_fail("Invalid user_response data", status=400)
-        
+
         conv.user_response = user_response
         conv.save(update_fields=["user_response", "updated_at"])
-        
+
         return json_ok({
             "conversation_id": conv.pk,
             "user_response": conv.user_response,
@@ -485,25 +655,13 @@ def delete_response(request, conv_id):
     """Delete conversation and associated assessments."""
     if request.method != "DELETE":
         return json_fail("Method not allowed", status=405)
-    
+
     try:
         conv = get_object_or_404(Conversation, id=conv_id)
-        
-        # Delete associated assessments (cascade should handle this, but explicit is better)
         Assessment.objects.filter(conversation=conv).delete()
-        
-        # Delete conversation
         conv.delete()
-        
+
         return json_ok({"message": "Response deleted successfully"})
     except Exception as exc:
         logger.exception("Failed to delete response")
         return json_fail("Failed to delete response", status=500, details=str(exc))
-
-def _get_fallback_questions() -> List[Dict[str, str]]:
-    """Return fallback questions when generation fails."""
-    return [
-        {"q": "Explain a fundamental concept in your field"},
-        {"q": "Describe a practical project you've worked on"},
-        {"q": "How would you solve a complex technical challenge?"}
-    ]
