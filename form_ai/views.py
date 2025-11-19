@@ -235,18 +235,19 @@ def _analyze_user_responses(
 @csrf_exempt
 @require_POST
 def generate_assessment(request, conv_id):
-    """Generate assessment with expertise-based questions."""
+    """Generate assessment with predefined questions from constants."""
     try:
         conv = get_object_or_404(Conversation, id=conv_id)
 
         if not conv.user_response:
             return json_fail("No user response data", status=400)
 
-        qualification = conv.user_response.get("qualification", "")
-        experience = conv.user_response.get("experience", "")
-
-        api_key = require_env("OPENAI_API_KEY")
-        questions = _generate_expertise_questions(qualification, experience, api_key)
+        # Get predefined questions from constants.py
+        questions = C.get_questions()
+        
+        if not questions:
+            logger.error("No questions available from constants")
+            return json_fail("No questions configured", status=500)
 
         assessment = Assessment.objects.create(
             conversation=conv,
@@ -278,7 +279,7 @@ def save_assessment(request, assessment_id):
             return json_fail("Invalid messages", status=400)
 
         logger.info(f"✓ Assessment {assessment_id}: Saved {len(messages)} messages")
-        
+
         assessment.messages = messages
         assessment.save(update_fields=["messages", "updated_at"])
 
@@ -295,12 +296,12 @@ def analyze_assessment(request, assessment_id):
     try:
         assessment = get_object_or_404(Assessment, id=assessment_id)
         body = safe_json_parse(request.body)
-        
+
         logger.info(f"[ANALYZE] Assessment {assessment_id}")
-        
+
         # Get direct Q&A mapping from frontend
         qa_mapping = body.get('qa_mapping', {})
-        
+
         if qa_mapping and isinstance(qa_mapping, dict) and any(qa_mapping.values()):
             logger.info(f"[ANALYZE] Using direct mapping: {qa_mapping}")
             answers = {
@@ -315,9 +316,9 @@ def analyze_assessment(request, assessment_id):
                 assessment.questions,
                 api_key
             )
-        
+
         logger.info(f"[ANALYZE] ✓ Final answers: {answers}")
-        
+
         assessment.answers = answers
         assessment.completed = True
         assessment.save(update_fields=["answers", "completed", "updated_at"])
@@ -335,142 +336,6 @@ def analyze_assessment(request, assessment_id):
 # Assessment Helper Functions
 # ============================================================================
 
-def _generate_expertise_questions(
-    qualification: str,
-    experience: str,
-    api_key: str
-) -> List[Dict[str, str]]:
-    """Generate technical questions based on qualification and experience."""
-    headers = get_openai_headers(api_key)
-
-    prompt = (
-        f"Generate exactly 3 technical interview questions for a candidate with:\n"
-        f"- Qualification: {qualification}\n"
-        f"- Experience: {experience}\n\n"
-        f"Questions should be:\n"
-        f"1. One fundamental concept question\n"
-        f"2. One practical/scenario-based question\n"
-        f"3. One advanced/problem-solving question\n\n"
-        f'Return as JSON array: [{{"q": "question text"}}]'
-    )
-
-    payload = {
-        "model": "gpt-4o-mini",
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.7
-    }
-
-    try:
-        data = post_json(OPENAI_CHAT_URL, headers, payload, timeout=20)
-        content = data["choices"][0]["message"]["content"]
-        questions = parse_json_from_response(content)
-        return questions[:3]
-    except Exception as e:
-        logger.warning(f"Question generation failed: {e}")
-        return [
-            {"q": "Explain a fundamental concept in your field"},
-            {"q": "Describe a practical project you've worked on"},
-            {"q": "How would you solve a complex technical challenge?"}
-        ]
-
-
-def _extract_assessment_answers(
-    messages: List[Dict],
-    questions: List[Dict],
-    api_key: str
-) -> Dict[str, str]:
-    """
-    Extract answers from messages using AI.
-    Called only when frontend doesn't send direct mapping.
-    """
-    logger.info("[EXTRACT] Starting AI extraction")
-    
-    headers = get_openai_headers(api_key)
-    
-    # Sort messages by timestamp
-    sorted_messages = sorted(messages, key=lambda m: m.get('ts', ''))
-    
-    # Build conversation
-    conversation_text = "\n".join([
-        f"{m.get('role', 'unknown').upper()}: {m.get('content', '')}"
-        for m in sorted_messages
-    ])
-    
-    # Build questions
-    questions_text = "\n".join([
-        f"Q{i+1}: {q['q']}" for i, q in enumerate(questions)
-    ])
-    
-    prompt = f"""Extract the candidate's answers from this interview.
-
-QUESTIONS:
-{questions_text}
-
-CONVERSATION:
-{conversation_text}
-
-INSTRUCTIONS:
-- Extract only USER's substantive answers
-- Match answers to questions in order
-- Ignore trailing "I don't know" or incomplete responses
-- Return empty string if not answered
-
-Return JSON: {{"q1": "answer", "q2": "answer", "q3": "answer"}}"""
-
-    payload = {
-        "model": "gpt-4o-mini",
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.1
-    }
-
-    try:
-        data = post_json(OPENAI_CHAT_URL, headers, payload, timeout=30)
-        content = data["choices"][0]["message"]["content"]
-        result = parse_json_from_response(content)
-        logger.info(f"[EXTRACT] ✓ Extracted: {result}")
-        return result
-    except Exception as e:
-        logger.error(f"[EXTRACT] ✗ Failed: {e}")
-        return {"q1": "", "q2": "", "q3": ""}
-
-
-# ============================================================================
-# Assessment Helper Functions
-# ============================================================================
-
-def _generate_expertise_questions(
-    qualification: str,
-    experience: str,
-    api_key: str
-) -> List[Dict[str, str]]:
-    """Generate technical questions based on qualification and experience."""
-    headers = get_openai_headers(api_key)
-
-    prompt = (
-        f"Generate exactly 3 technical interview questions for a candidate "
-        f"with:\n- Qualification: {qualification}\n- Experience: {experience}"
-        f"\n\nQuestions should be:\n1. One fundamental concept question\n"
-        f"2. One practical/scenario-based question\n"
-        f"3. One advanced/problem-solving question\n\n"
-        f'Return as JSON array: [{{"q": "question text"}}]'
-    )
-
-    payload = {
-        "model": "gpt-4o-mini",
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.7
-    }
-
-    try:
-        data = post_json(OPENAI_CHAT_URL, headers, payload, timeout=20)
-        content = data["choices"][0]["message"]["content"]
-        questions = parse_json_from_response(content)
-        return questions[:3]
-    except (KeyError, json.JSONDecodeError, IndexError, AppError) as e:
-        logger.warning(f"Failed to generate questions: {e}")
-        return _get_fallback_questions()
-
-
 def _extract_assessment_answers(
     messages: List[Dict],
     questions: List[Dict],
@@ -482,36 +347,36 @@ def _extract_assessment_answers(
     """
     logger.info(f"[EXTRACT] Starting extraction for {len(questions)} questions")
     logger.info(f"[EXTRACT] Messages count: {len(messages)}")
-    
+
     # Sort messages by timestamp
     sorted_messages = sorted(messages, key=lambda m: m.get('ts', ''))
-    
+
     logger.info(f"[EXTRACT] Sorted messages:")
     for i, msg in enumerate(sorted_messages):
-        logger.info(f"  [{i}] {msg.get('role')}: {msg.get('content', '')[:100]}")
-    
+        logger.info(f" [{i}] {msg.get('role')}: {msg.get('content', '')[:100]}")
+
     # Try pattern matching first
     answers = {}
-    
+
     for q_idx, question in enumerate(questions):
         q_key = f"q{q_idx + 1}"
         q_text = question.get('q', '').lower()
-        
+
         logger.info(f"[EXTRACT] Looking for Q{q_idx + 1}: {q_text[:50]}...")
-        
+
         # Find question in messages
         for i, msg in enumerate(sorted_messages):
             if msg.get('role') == 'assistant':
                 content_lower = msg.get('content', '').lower()
-                
+
                 # Check if this message contains the question
                 # Match key words from question
                 key_words = [w for w in q_text.split() if len(w) > 4]
                 matches = sum(1 for word in key_words if word in content_lower)
-                
+
                 if matches >= min(3, len(key_words)):
                     logger.info(f"[EXTRACT] Found question at index {i}")
-                    
+
                     # Get next user message
                     for j in range(i + 1, len(sorted_messages)):
                         if sorted_messages[j].get('role') == 'user':
@@ -520,12 +385,12 @@ def _extract_assessment_answers(
                             logger.info(f"[EXTRACT] Found answer: {answer[:100]}")
                             break
                     break
-    
+
     # If pattern matching found answers, return them
     if any(answers.values()):
         logger.info(f"[EXTRACT] Pattern matching successful: {answers}")
         return {f"q{i+1}": answers.get(f"q{i+1}", "") for i in range(len(questions))}
-    
+
     # Fallback to AI extraction
     logger.info("[EXTRACT] Pattern matching failed, using AI extraction")
     return _ai_extract_answers(sorted_messages, questions, api_key)
@@ -538,23 +403,23 @@ def _ai_extract_answers(
 ) -> Dict[str, str]:
     """Use AI to extract answers when pattern matching fails."""
     logger.info("[AI_EXTRACT] Starting AI extraction")
-    
+
     headers = get_openai_headers(api_key)
-    
+
     # Build conversation text
     conversation_lines = []
     for msg in messages:
         role = msg.get('role', 'unknown').upper()
         content = msg.get('content', '')
         conversation_lines.append(f"{role}: {content}")
-    
+
     conversation_text = "\n".join(conversation_lines)
-    
+
     # Build questions text
     questions_text = "\n".join([
         f"Question {i+1}: {q['q']}" for i, q in enumerate(questions)
     ])
-    
+
     prompt = f"""Extract the candidate's answers from this technical interview.
 
 QUESTIONS ASKED:
@@ -573,7 +438,7 @@ Return JSON object with keys q1, q2, q3:
 {{"q1": "answer text", "q2": "answer text", "q3": "answer text"}}"""
 
     logger.info(f"[AI_EXTRACT] Prompt:\n{prompt[:500]}...")
-    
+
     payload = {
         "model": "gpt-4o-mini",
         "messages": [{"role": "user", "content": prompt}],
@@ -583,26 +448,21 @@ Return JSON object with keys q1, q2, q3:
     try:
         data = post_json(OPENAI_CHAT_URL, headers, payload, timeout=30)
         content = data["choices"][0]["message"]["content"]
-        
+
         logger.info(f"[AI_EXTRACT] Raw response: {content}")
-        
+
         result = parse_json_from_response(content)
         logger.info(f"[AI_EXTRACT] Parsed result: {result}")
-        
+
         return result
     except (KeyError, json.JSONDecodeError, IndexError, AppError) as e:
         logger.error(f"[AI_EXTRACT] Failed: {e}")
-        return {"q1": "", "q2": "", "q3": ""}
+        return {f"q{i+1}": "" for i in range(len(questions))}
 
 
-def _get_fallback_questions() -> List[Dict[str, str]]:
-    """Return fallback questions when generation fails."""
-    return [
-        {"q": "Explain a fundamental concept in your field"},
-        {"q": "Describe a practical project you've worked on"},
-        {"q": "How would you solve a complex technical challenge?"}
-    ]
-
+# ============================================================================
+# Response Management Views
+# ============================================================================
 
 @csrf_exempt
 def view_response(request, conv_id):
