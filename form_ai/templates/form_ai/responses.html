@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -16,8 +17,8 @@
 <body>
 
     <!-- ============================================================
-        HEADER SECTION
-    ============================================================= -->
+HEADER SECTION
+============================================================= -->
     <header class="header">
         <h1>Interview Responses</h1>
         <nav class="header-actions">
@@ -28,171 +29,147 @@
     </header>
 
     <!-- ============================================================
-        MAIN CONTENT
-    ============================================================= -->
+MAIN CONTENT
+============================================================= -->
     <main class="layout">
 
         {% if conversations %}
-            <!-- Responses List -->
-            <ul class="responses-list">
-                {% for conv in conversations %}
-                    <li class="response-container" data-conv-id="{{ conv.id }}">
+        <!-- Responses List -->
+        <ul class="responses-list">
+            {% for conv in conversations %}
+            <li class="response-container" data-conv-id="{{ conv.id }}">
 
-                        <!-- ==================== Meta Information ==================== -->
-                        <div class="response-meta">
-                            <div class="meta-row">
-                                <span class="meta-label">Response #:</span>
-                                <span class="meta-value">{{ forloop.counter }}</span>
-                            </div>
-                            <div class="meta-row">
-                                <span class="meta-label">Date:</span>
-                                <span class="meta-value">
-                                    {{ conv.created_at|date:"M d, Y - H:i" }}
-                                </span>
-                            </div>
+                <!-- ==================== Meta Information ==================== -->
+                <div class="response-meta">
+                    <div class="meta-row">
+                        <span class="meta-label">Response #:</span>
+                        <span class="meta-value">{{ forloop.counter }}</span>
+                    </div>
+                    <div class="meta-row">
+                        <span class="meta-label">Date:</span>
+                        <span class="meta-value">
+                            {{ conv.created_at|date:"M d, Y - H:i" }}
+                        </span>
+                    </div>
+                </div>
+
+                <!-- ==================== Candidate Information ==================== -->
+                {% if conv.user_response %}
+                <div class="response-data">
+                    <strong>Candidate Information:</strong>
+                    <div class="response-fields">
+                        {% for key, value in conv.user_response.items %}
+                        <div class="response-field">
+                            <span class="response-key">{{ key|title }}:</span>
+                            <span class="response-value {% if value %}value-provided{% else %}value-empty{% endif %}">
+                                {{ value|default:"Not provided" }}
+                            </span>
                         </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
 
-                        <!-- ==================== Candidate Information ==================== -->
-                        {% if conv.user_response %}
-                            <div class="response-data">
-                                <strong>Candidate Information:</strong>
-                                <div class="response-fields">
-                                    {% for key, value in conv.user_response.items %}
-                                        <div class="response-field">
-                                            <span class="response-key">{{ key|title }}:</span>
-                                            <span class="response-value {% if value %}value-provided{% else %}value-empty{% endif %}">
-                                                {{ value|default:"Not provided" }}
-                                            </span>
-                                        </div>
-                                    {% endfor %}
-                                </div>
-                            </div>
+                <!-- ==================== Action Buttons ==================== -->
+                <div class="response-actions">
+
+                    <!-- Primary Actions Row -->
+                    <div class="actions-row">
+                        <button class="control-btn view-btn" data-conv-id="{{ conv.id }}" title="View full details">
+                            👁️ View
+                        </button>
+
+                        <button class="control-btn edit-btn" data-conv-id="{{ conv.id }}"
+                            title="Edit candidate information">
+                            ✏️ Edit
+                        </button>
+
+                        <button class="control-btn delete-btn" data-conv-id="{{ conv.id }}"
+                            title="Delete this response">
+                            🗑️ Delete
+                        </button>
+                    </div>
+
+                    <!-- Assessment Actions -->
+                    <div class="actions-row">
+                        <button class="control-btn primary generate-assessment-btn" data-conv-id="{{ conv.id }}">
+                            📋 Generate Assessment URL
+                        </button>
+
+                        <button class="control-btn redirect-btn" data-conv-id="{{ conv.id }}" style="display:none;">
+                            🚀 Start Assessment
+                        </button>
+
+                        {% if conv.assessments.exists %}
+                        <button class="control-btn view-assessments-btn" data-conv-id="{{ conv.id }}">
+                            📊 View Assessments ({{ conv.assessments.count }})
+                        </button>
                         {% endif %}
+                    </div>
 
-                        <!-- ==================== Action Buttons ==================== -->
-                        <div class="response-actions">
-                            
-                            <!-- Primary Actions Row -->
-                            <div class="actions-row">
-                                <button 
-                                    class="control-btn view-btn"
-                                    data-conv-id="{{ conv.id }}"
-                                    title="View full details"
-                                >
-                                    👁️ View
-                                </button>
+                    <!-- Assessment URL Display (Hidden by default) -->
+                    <div class="assessment-url-display" id="url-display-{{ conv.id }}" style="display:none;">
+                        <input type="text" readonly class="url-input" aria-label="Assessment URL" />
+                        <button class="control-btn copy-btn">📋 Copy</button>
+                    </div>
 
-                                <button 
-                                    class="control-btn edit-btn"
-                                    data-conv-id="{{ conv.id }}"
-                                    title="Edit candidate information"
-                                >
-                                    ✏️ Edit
-                                </button>
-
-                                <button 
-                                    class="control-btn delete-btn"
-                                    data-conv-id="{{ conv.id }}"
-                                    title="Delete this response"
-                                >
-                                    🗑️ Delete
-                                </button>
-                            </div>
-
-                            <!-- Assessment Actions -->
-                            <div class="actions-row">
-                                <button
-                                    class="control-btn primary generate-assessment-btn"
-                                    data-conv-id="{{ conv.id }}"
-                                >
-                                    📋 Generate Assessment URL
-                                </button>
-
-                                {% if conv.assessments.exists %}
-                                    <button
-                                        class="control-btn view-assessments-btn"
-                                        data-conv-id="{{ conv.id }}"
-                                    >
-                                        📊 View Assessments ({{ conv.assessments.count }})
-                                    </button>
-                                {% endif %}
-                            </div>
-
-                            <!-- Assessment URL Display (Hidden by default) -->
-                            <div
-                                class="assessment-url-display"
-                                id="url-display-{{ conv.id }}"
-                                style="display:none;"
-                            >
-                                <input
-                                    type="text"
-                                    readonly
-                                    class="url-input"
-                                    aria-label="Assessment URL"
-                                />
-                                <button class="control-btn copy-btn">📋 Copy</button>
-                            </div>
-
-                            <!-- Assessments List (Hidden by default) -->
-                            {% if conv.assessments.exists %}
-                                <div
-                                    class="assessments-list"
-                                    id="assessments-{{ conv.id }}"
-                                    style="display:none;"
-                                >
-                                    {% for assessment in conv.assessments.all %}
-                                        <div class="assessment-item">
-                                            <div class="assessment-header">
-                                                <div>
-                                                    <strong>Created:</strong>
-                                                    {{ assessment.created_at|date:"M d, Y - H:i" }}
-                                                </div>
-                                                <div>
-                                                    <strong>Status:</strong>
-                                                    <span class="status-badge {% if assessment.completed %}status-completed{% else %}status-pending{% endif %}">
-                                                        {{ assessment.completed|yesno:"✓ Completed,⏳ Pending" }}
-                                                    </span>
-                                                </div>
-                                            </div>
-
-                                            {% if assessment.answers %}
-                                                <div class="assessment-answers">
-                                                    <strong>Answers:</strong>
-                                                    {% for key, value in assessment.answers.items %}
-                                                        <div class="answer-item">
-                                                            <strong>{{ key }}:</strong> {{ value }}
-                                                        </div>
-                                                    {% endfor %}
-                                                </div>
-                                            {% endif %}
-                                        </div>
-                                    {% endfor %}
+                    <!-- Assessments List (Hidden by default) -->
+                    {% if conv.assessments.exists %}
+                    <div class="assessments-list" id="assessments-{{ conv.id }}" style="display:none;">
+                        {% for assessment in conv.assessments.all %}
+                        <div class="assessment-item">
+                            <div class="assessment-header">
+                                <div>
+                                    <strong>Created:</strong>
+                                    {{ assessment.created_at|date:"M d, Y - H:i" }}
                                 </div>
+                                <div>
+                                    <strong>Status:</strong>
+                                    <span
+                                        class="status-badge {% if assessment.completed %}status-completed{% else %}status-pending{% endif %}">
+                                        {{ assessment.completed|yesno:"✓ Completed,⏳ Pending" }}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {% if assessment.answers %}
+                            <div class="assessment-answers">
+                                <strong>Answers:</strong>
+                                {% for key, value in assessment.answers.items %}
+                                <div class="answer-item">
+                                    <strong>{{ key }}:</strong> {{ value }}
+                                </div>
+                                {% endfor %}
+                            </div>
                             {% endif %}
-
                         </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
 
-                    </li>
-                {% endfor %}
-            </ul>
+                </div>
+
+            </li>
+            {% endfor %}
+        </ul>
 
         {% else %}
-            <!-- Empty State -->
-            <div class="empty-state">
-                <div class="empty-icon">📭</div>
-                <h3>No Responses Yet</h3>
-                <p>Complete a voice interview to see responses here.</p>
-                <a href="{% url 'voice_page' %}" class="control-btn primary">
-                    Start Interview
-                </a>
-            </div>
+        <!-- Empty State -->
+        <div class="empty-state">
+            <div class="empty-icon">📭</div>
+            <h3>No Responses Yet</h3>
+            <p>Complete a voice interview to see responses here.</p>
+            <a href="{% url 'voice_page' %}" class="control-btn primary">
+                Start Interview
+            </a>
+        </div>
         {% endif %}
 
     </main>
 
     <!-- ============================================================
-        VIEW MODAL
-    ============================================================= -->
+VIEW MODAL
+============================================================= -->
     <div id="viewModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -209,8 +186,8 @@
     </div>
 
     <!-- ============================================================
-        EDIT MODAL
-    ============================================================= -->
+EDIT MODAL
+============================================================= -->
     <div id="editModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -234,8 +211,8 @@
     </div>
 
     <!-- ============================================================
-        DELETE CONFIRMATION MODAL
-    ============================================================= -->
+DELETE CONFIRMATION MODAL
+============================================================= -->
     <div id="deleteModal" class="modal">
         <div class="modal-content modal-small">
             <div class="modal-header">
@@ -259,9 +236,40 @@
     </div>
 
     <!-- ============================================================
-        JAVASCRIPT
-    ============================================================= -->
+REDIRECT CONFIRMATION MODAL
+============================================================= -->
+    <div id="redirectModal" class="modal">
+        <div class="modal-content modal-small">
+            <div class="modal-header">
+                <h2>Start Assessment</h2>
+                <button class="modal-close" aria-label="Close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="redirect-content">
+                    <div class="redirect-icon">🚀</div>
+                    <p class="redirect-message">
+                        You are about to start the technical assessment for this candidate.
+                    </p>
+                    <p class="muted-text">
+                        Make sure your microphone is enabled and you're in a quiet environment.
+                    </p>
+                </div>
+                <input type="hidden" id="redirect-url">
+            </div>
+            <div class="modal-footer">
+                <button class="control-btn modal-close">Cancel</button>
+                <button class="control-btn primary" id="confirmRedirectBtn">
+                    Start Assessment →
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
+JAVASCRIPT
+============================================================= -->
     <script src="{% static 'form_ai/js/responses.js' %}"></script>
 
 </body>
+
 </html>

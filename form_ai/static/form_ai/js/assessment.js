@@ -224,6 +224,7 @@ async function startAssessment() {
                 // ===== SESSION CREATED =====
                 if (msg.type === "session.created" && !sessionCreated) {
                     sessionCreated = true;
+                    // -- [API CALL]: Trigger AI to start a response after session is established (WebRTC DataChannel)
                     dc.send(JSON.stringify({ type: "response.create" }));
                     status && (status.textContent = "Assessment in progress");
                     console.log("%c[✓] Session started", "color: #00ff00; font-weight: bold");
@@ -342,6 +343,7 @@ async function startAssessment() {
         // ========================================================
 
         status && (status.textContent = "Getting session...");
+        // -- [API CALL]: Create ephemeral session on backend (assessment mode) and retrieve ephemeral key
         const sessResp = await fetch("/api/session", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -365,6 +367,7 @@ async function startAssessment() {
         // ========================================================
 
         status && (status.textContent = "Connecting...");
+        // -- [API CALL]: Exchange SDP with OpenAI Realtime API using the ephemeral key
         const oaResp = await fetch(
             `https://api.openai.com/v1/realtime?model=${encodeURIComponent(sess.model)}`,
             {
@@ -448,6 +451,7 @@ async function saveAssessmentToServer(assessmentId, sessionId = null) {
         $("status") && ($("status").textContent = "Saving...");
 
         // Save messages
+        // -- [API CALL]: Save assessment conversation messages to backend
         const saveResp = await fetch(`/assessment/${assessmentId}/save/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -468,7 +472,7 @@ async function saveAssessmentToServer(assessmentId, sessionId = null) {
 
         // Analyze answers
         $("status") && ($("status").textContent = "Analyzing...");
-        
+        // -- [API CALL]: Request backend to analyze answers using captured Q&A mapping
         const analyzeResp = await fetch(`/assessment/${assessmentId}/analyze/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -549,6 +553,7 @@ document.getElementById("start")?.addEventListener("click", () => {
 
         try {
             if (window._dc?.readyState === "open") {
+                // -- [API CALL]: Notify AI to disconnect the realtime session (WebRTC DataChannel)
                 window._dc.send(JSON.stringify({ type: "session.disconnect" }));
             }
         } catch (e) {}

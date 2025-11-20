@@ -18,4 +18,6 @@ urlpatterns = [
     path("assessment/<uuid:assessment_id>/", views.conduct_assessment, name="conduct_assessment"),
     path("assessment/<uuid:assessment_id>/save/", views.save_assessment, name="save_assessment"),
     path("assessment/<uuid:assessment_id>/analyze/", views.analyze_assessment, name="analyze_assessment"),
+    # Assessment token
+    path('assessment/<str:token>/', views.conduct_assessment, name='conduct_assessment'),
 ]

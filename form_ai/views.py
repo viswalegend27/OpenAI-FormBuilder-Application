@@ -1,7 +1,10 @@
+# views.py
 import logging
-import os
 
-from django.shortcuts import render
+from django.conf import settings
+from django.core.signing import TimestampSigner, BadSignature, SignatureExpired
+from django.http import HttpResponseRedirect
+from django.shortcuts import render, redirect
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
@@ -24,6 +27,32 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 DEFAULT_EXTRACTION_KEYS = ["name", "qualification", "experience"]
+ASSESSMENT_TOKEN_MAX_AGE = 60 * 60 * 24 * 7  # 7 days
+
+# ============================================================================
+# URL Encryption Utilities
+# ============================================================================
+
+signer = TimestampSigner()
+
+
+def encrypt_assessment_id(assessment_id):
+    """Encrypt assessment ID into a URL-safe token."""
+    return signer.sign(str(assessment_id))
+
+
+def decrypt_assessment_token(token, max_age=ASSESSMENT_TOKEN_MAX_AGE):
+    """
+    Decrypt assessment token to get ID.
+    Returns assessment_id or None if invalid/expired.
+    """
+    try:
+        assessment_id = signer.unsign(token, max_age=max_age)
+        return assessment_id
+    except (BadSignature, SignatureExpired) as e:
+        logger.warning(f"Invalid assessment token: {e}")
+        return None
+
 
 # ============================================================================
 # Page Views
@@ -45,8 +74,19 @@ def view_responses(request):
     })
 
 
-def conduct_assessment(request, assessment_id):
-    """Render assessment page."""
+def conduct_assessment(request, token):
+    """
+    Render assessment page using encrypted token.
+    Validates token and retrieves assessment.
+    """
+    assessment_id = decrypt_assessment_token(token)
+    
+    if not assessment_id:
+        return render(request, "form_ai/error.html", {
+            "error": "Invalid or expired assessment link",
+            "message": "This assessment link is no longer valid. Please contact support."
+        }, status=400)
+    
     assessment = get_object_or_fail(Assessment, id=assessment_id)
     user_info = assessment.conversation.user_response or {}
 
@@ -71,7 +111,7 @@ def create_realtime_session(request):
     client = OpenAIClient()
     payload = _get_session_payload(request)
     session_data = client.create_realtime_session(payload)
-    
+
     return json_ok(session_data)
 
 
@@ -103,7 +143,7 @@ def save_conversation(request):
     body = safe_json_parse(request.body)
     messages = validate_field(body, "messages", list)
     session_id = body.get("session_id")
-    
+
     conv = Conversation.objects.create(
         session_id=session_id,
         messages=messages
@@ -122,10 +162,10 @@ def analyze_conversation(request):
     """Analyze conversation and extract user responses."""
     body = safe_json_parse(request.body)
     session_id = validate_field(body, "session_id", str)
-    
+
     conv = get_object_or_fail(Conversation, session_id=session_id)
     client = OpenAIClient()
-    
+
     extracted = client.extract_structured_data(
         conv.messages,
         DEFAULT_EXTRACTION_KEYS
@@ -148,7 +188,10 @@ def analyze_conversation(request):
 @require_POST
 @handle_view_errors("Failed to generate assessment")
 def generate_assessment(request, conv_id):
-    """Generate assessment with predefined questions from constants."""
+    """
+    Generate assessment with encrypted URL.
+    Returns encrypted assessment URL for secure access.
+    """
     conv = get_object_or_fail(Conversation, id=conv_id)
 
     if not conv.user_response:
@@ -164,12 +207,18 @@ def generate_assessment(request, conv_id):
         questions=questions
     )
 
-    assessment_url = request.build_absolute_uri(f"/assessment/{assessment.id}/")
+    # Generate encrypted token
+    encrypted_token = encrypt_assessment_id(assessment.id)
+    assessment_url = request.build_absolute_uri(f"/assessment/{encrypted_token}/")
+
+    logger.info(f"✓ Generated encrypted assessment: {assessment.id}")
 
     return json_ok({
         "assessment_id": str(assessment.id),
         "assessment_url": assessment_url,
-        "questions": questions
+        "token": encrypted_token,
+        "questions": questions,
+        "redirect": True  # Signal frontend to redirect
     })
 
 
@@ -182,10 +231,10 @@ def save_assessment(request, assessment_id):
     body = safe_json_parse(request.body)
     messages = validate_field(body, "messages", list)
 
-    logger.info(f"✓ Assessment {assessment_id}: Saved {len(messages)} messages")
-
     assessment.messages = messages
     assessment.save(update_fields=["messages", "updated_at"])
+
+    logger.info(f"✓ Assessment {assessment_id}: Saved {len(messages)} messages")
 
     return json_ok({"assessment_id": str(assessment.id)})
 
@@ -204,7 +253,7 @@ def analyze_assessment(request, assessment_id):
     qa_mapping = body.get('qa_mapping', {})
 
     if qa_mapping and isinstance(qa_mapping, dict) and any(qa_mapping.values()):
-        logger.info(f"[ANALYZE] Using direct mapping: {qa_mapping}")
+        logger.info(f"[ANALYZE] Using direct mapping")
         answers = {
             f"q{i+1}": qa_mapping.get(f"q{i+1}", "")
             for i in range(len(assessment.questions))
@@ -225,7 +274,8 @@ def analyze_assessment(request, assessment_id):
 
     return json_ok({
         "assessment_id": str(assessment.id),
-        "answers": answers
+        "answers": answers,
+        "completed": True
     })
 
 

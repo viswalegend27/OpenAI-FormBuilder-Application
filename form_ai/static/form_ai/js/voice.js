@@ -143,6 +143,7 @@ function hideVerificationPopup() {
         
         // Send confirmation to AI
         if (window._dc && window._dc.readyState === "open") {
+            // -- [API CALL]: Send verified user info to AI over WebRTC DataChannel
             window._dc.send(JSON.stringify({
                 type: "conversation.item.create",
                 item: {
@@ -154,6 +155,7 @@ function hideVerificationPopup() {
                     }]
                 }
             }));
+            // -- [API CALL]: Request AI to generate a response
             window._dc.send(JSON.stringify({ type: "response.create" }));
         }
     });
@@ -199,6 +201,7 @@ async function startVoice() {
 
                 if (msg.type === "session.created" && !sessionCreated) {
                     sessionCreated = true;
+                    // -- [API CALL]: Trigger AI to start a response after session established (WebRTC DataChannel)
                     dc.send(JSON.stringify({ type: "response.create" }));
                     status && (status.textContent = "Connected");
                 }
@@ -255,6 +258,7 @@ async function startVoice() {
                         showVerificationPopup(args);
                         
                         // Send tool response
+                        // -- [API CALL]: Return tool output back to AI (function tool result via DataChannel)
                         dc.send(JSON.stringify({
                             type: "conversation.item.create",
                             item: {
@@ -293,6 +297,7 @@ async function startVoice() {
         await waitForIceGathering(pc, 3000);
 
         status && (status.textContent = "Getting session...");
+        // -- [API CALL]: Get ephemeral session and key from backend
         const sessResp = await fetch("/api/session");
         if (!sessResp.ok) throw new Error(await sessResp.text());
         const sess = await sessResp.json();
@@ -301,6 +306,7 @@ async function startVoice() {
         if (!ephemeralKey) throw new Error("No ephemeral key");
 
         status && (status.textContent = "Exchanging SDP...");
+        // -- [API CALL]: Exchange SDP with OpenAI Realtime API using ephemeral key
         const oaResp = await fetch(
             `https://api.openai.com/v1/realtime?model=${encodeURIComponent(sess.model)}`,
             {
@@ -336,6 +342,7 @@ async function saveConversationToServer(sessionId = null) {
 
     try {
         $("status") && ($("status").textContent = "Saving conversation...");
+        // -- [API CALL]: Save conversation messages to backend
         const saveResp = await fetch("/api/conversation/", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -355,6 +362,7 @@ async function saveConversationToServer(sessionId = null) {
         console.log("Conversation saved:", saveData);
 
         $("status") && ($("status").textContent = "Analyzing responses...");
+        // -- [API CALL]: Request backend to analyze saved conversation
         const analyzeResp = await fetch("/api/conversation/analyze", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -395,6 +403,7 @@ async function saveConversationToServer(sessionId = null) {
 
         try {
             if (window._dc && window._dc.readyState === "open") {
+                // -- [API CALL]: Notify AI to disconnect the realtime session (WebRTC DataChannel)
                 window._dc.send(JSON.stringify({ type: "session.disconnect" }));
             }
         } catch (e) {
