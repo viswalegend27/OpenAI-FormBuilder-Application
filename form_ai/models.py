@@ -48,7 +48,9 @@ class Assessment(models.Model):
     )
     # ForeignKey is on Assessment → Each Assessment points to ONE Conversation
     conversation = models.ForeignKey(
+        # Points to one conversation. Each assessment points to 1 conversation
         Conversation,
+        # This is my many (N) side which holds the foreign key.
         on_delete=models.CASCADE,
         # Each Conversation can access MULTIPLE Assessments
         related_name='assessments',
@@ -105,6 +107,7 @@ class Question(models.Model):
     """
     # Assessment is the foreignKey
     assessment = models.ForeignKey(
+        # Each question to point to one assessment
         Assessment,
         on_delete=models.CASCADE,
         # Pointing towards the questions.
@@ -147,9 +150,11 @@ class Answer(models.Model):
     
     Data format: {"answer_text": "...", "question_number": 1}
     """
+    # Here where 1 : 1 (has answer) relationship is initiated.
     question = models.OneToOneField(
         Question,
         on_delete=models.CASCADE,
+        # Singular name 1 : 1 (Question) : (Answer)
         related_name='answer',
         help_text="Question this answer responds to"
     )
