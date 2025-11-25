@@ -42,11 +42,13 @@ class AssessmentTokenManager:
     
     def encrypt(self, assessment_id):
         """Encrypt assessment ID into a URL-safe token."""
+        # Uses timestampSigner to produced a signed token.
         return self.signer.sign(str(assessment_id))
     
     def decrypt(self, token, max_age=ASSESSMENT_TOKEN_MAX_AGE):
         """Decrypt assessment token to retrieve the original ID."""
         try:
+            
             assessment_id = self.signer.unsign(token, max_age=max_age)
             return assessment_id
         except (BadSignature, SignatureExpired) as e:
@@ -102,6 +104,7 @@ def view_responses(request):
 
 def conduct_assessment(request, token):
     """Render assessment page using encrypted token for security."""
+    # Here when our decryption process. Takes place
     assessment_id = token_manager.decrypt(token)
     
     if not assessment_id:
@@ -233,6 +236,7 @@ def generate_assessment(request, conv_id):
             }
         )
     
+    # My assessment ID is passed down in my code.
     encrypted_token = token_manager.encrypt(assessment.id)
     assessment_url = request.build_absolute_uri(f"/assessment/{encrypted_token}/")
     

@@ -46,9 +46,11 @@ class Assessment(models.Model):
         default=uuid.uuid4,
         editable=False
     )
+    # ForeignKey is on Assessment → Each Assessment points to ONE Conversation
     conversation = models.ForeignKey(
         Conversation,
         on_delete=models.CASCADE,
+        # Each Conversation can access MULTIPLE Assessments
         related_name='assessments',
         help_text="Parent conversation that triggered this assessment"
     )
@@ -101,9 +103,11 @@ class Question(models.Model):
     
     Data format: {"question_number": 1, "question_text": "..."}
     """
+    # Assessment is the foreignKey
     assessment = models.ForeignKey(
         Assessment,
         on_delete=models.CASCADE,
+        # Pointing towards the questions.
         related_name='questions',
         help_text="Assessment this question belongs to"
     )
