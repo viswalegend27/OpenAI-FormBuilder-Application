@@ -455,7 +455,13 @@ class ResponseManager {
         }
 
         this.toast.show('Redirecting...', 'info', 1500);
-        setTimeout(() => window.location.href = url, 1000);
+        this.modal.hide('redirectModal');
+        
+        // Use window.open for new page or assign for same tab
+        setTimeout(() => {
+            // Encode URL properly to handle special characters
+            window.location.assign(url);
+        }, 500);
     }
 
     async handleCopy(btn) {

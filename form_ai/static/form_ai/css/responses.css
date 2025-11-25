@@ -1,29 +1,57 @@
+/* ============================================================
+    RESPONSES.CSS - Optimized
+============================================================ */
+
 :root {
+    /* Colors */
     --primary: #0F828C;
     --primary-dark: #0a5c64;
     --primary-light: #e6f4f5;
     --success: #10b981;
     --danger: #ef4444;
     --warning: #f59e0b;
+    --info: #3b82f6;
+    
+    /* Backgrounds */
     --bg: #f0f4f8;
+    --bg-secondary: #f8f9fa;
     --panel-bg: #ffffff;
+    
+    /* Text */
     --text: #1a1a1a;
     --text-muted: #666;
+    --text-light: #999;
+    
+    /* Borders & Shadows */
     --border: #e0e0e0;
-    --shadow: 0 2px 8px rgba(0,0,0,0.1);
-    --shadow-lg: 0 10px 25px rgba(0,0,0,0.15);
+    --shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.15);
+    
+    /* Spacing & Sizing */
     --radius: 12px;
+    --radius-sm: 8px;
+    --radius-xs: 6px;
+    --radius-pill: 12px;
+    
+    /* Transitions */
     --transition: all 0.3s ease;
+    --transition-bounce: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
 }
 
-* {
+/* ============================================================
+   RESET & BASE
+   ============================================================ */
+
+*,
+*::before,
+*::after {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
 }
 
 body {
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     background: var(--bg);
     color: var(--text);
     line-height: 1.6;
@@ -34,7 +62,7 @@ body {
 
 /* ============================================================
    HEADER
-============================================================ */
+   ============================================================ */
 
 .header {
     display: flex;
@@ -60,14 +88,14 @@ body {
 }
 
 /* ============================================================
-   BUTTONS
+    BUTTONS
 ============================================================ */
 
 .control-btn {
     padding: 0.625rem 1.25rem;
-    border: 1px solid rgba(255,255,255,0.3);
-    border-radius: 8px;
-    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.1);
     color: white;
     font-weight: 500;
     font-size: 0.875rem;
@@ -82,8 +110,8 @@ body {
 }
 
 .control-btn:hover:not(:disabled) {
-    background: rgba(255,255,255,0.2);
-    border-color: rgba(255,255,255,0.5);
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.5);
     transform: translateY(-1px);
 }
 
@@ -91,6 +119,13 @@ body {
     transform: translateY(0);
 }
 
+.control-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Button Variants */
 .control-btn.primary {
     background: white;
     color: var(--primary);
@@ -98,7 +133,13 @@ body {
 }
 
 .control-btn.primary:hover:not(:disabled) {
-    background: #f8f9fa;
+    background: var(--bg-secondary);
+}
+
+.control-btn.success {
+    background: var(--success);
+    color: white;
+    border-color: var(--success);
 }
 
 .control-btn.danger {
@@ -111,19 +152,71 @@ body {
     background: #dc2626;
 }
 
-.control-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    transform: none;
+/* Action Buttons (View, Edit, Delete) */
+.view-btn {
+    background: var(--primary) !important;
+    color: white !important;
+    border-color: var(--primary) !important;
 }
 
-.control-btn.success {
-    background: var(--success);
-    border-color: var(--success);
+.edit-btn {
+    background: var(--warning) !important;
+    color: white !important;
+    border-color: var(--warning) !important;
+}
+
+.edit-btn:hover:not(:disabled) {
+    background: #d97706 !important;
+}
+
+.delete-btn,
+.delete-assessment-btn {
+    background: var(--danger) !important;
+    color: white !important;
+    border-color: var(--danger) !important;
+}
+
+.delete-btn:hover:not(:disabled),
+.delete-assessment-btn:hover:not(:disabled) {
+    background: #dc2626 !important;
+    transform: translateY(-1px);
+}
+
+.delete-assessment-btn {
+    padding: 0.5rem 0.75rem !important;
+    font-size: 0.8rem !important;
+    flex-shrink: 0;
+}
+
+/* Redirect Button */
+.redirect-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    color: white !important;
+    border: none !important;
+    font-weight: 600;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.redirect-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, #5568d3 0%, #6a4190 100%) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+}
+
+#confirmRedirectBtn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    font-weight: 600;
+    padding: 0.75rem 1.5rem;
+}
+
+#confirmRedirectBtn:hover:not(:disabled) {
+    background: linear-gradient(135deg, #5568d3 0%, #6a4190 100%);
+    transform: translateY(-1px);
 }
 
 /* ============================================================
-   LAYOUT
+    LAYOUT
 ============================================================ */
 
 .layout {
@@ -135,7 +228,7 @@ body {
 }
 
 /* ============================================================
-   RESPONSES LIST
+    RESPONSES LIST
 ============================================================ */
 
 .responses-list {
@@ -159,7 +252,7 @@ body {
 }
 
 /* ============================================================
-   RESPONSE META
+    RESPONSE META
 ============================================================ */
 
 .response-meta {
@@ -185,7 +278,7 @@ body {
 }
 
 /* ============================================================
-   RESPONSE DATA
+    RESPONSE DATA
 ============================================================ */
 
 .response-data {
@@ -209,7 +302,7 @@ body {
     gap: 0.75rem;
     padding: 0.75rem;
     background: var(--primary-light);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     border-left: 3px solid var(--primary);
 }
 
@@ -231,11 +324,11 @@ body {
 
 .value-empty {
     font-style: italic;
-    color: #999;
+    color: var(--text-light);
 }
 
 /* ============================================================
-   RESPONSE ACTIONS
+    RESPONSE ACTIONS
 ============================================================ */
 
 .response-actions {
@@ -259,7 +352,7 @@ body {
 }
 
 .response-actions .control-btn:hover:not(:disabled) {
-    background: #f8f9fa;
+    background: var(--bg-secondary);
     border-color: var(--primary);
 }
 
@@ -273,34 +366,8 @@ body {
     background: var(--primary-dark);
 }
 
-.view-btn {
-    background: var(--primary) !important;
-    color: white !important;
-    border-color: var(--primary) !important;
-}
-
-.edit-btn {
-    background: var(--warning) !important;
-    color: white !important;
-    border-color: var(--warning) !important;
-}
-
-.edit-btn:hover:not(:disabled) {
-    background: #d97706 !important;
-}
-
-.delete-btn {
-    background: var(--danger) !important;
-    color: white !important;
-    border-color: var(--danger) !important;
-}
-
-.delete-btn:hover:not(:disabled) {
-    background: #dc2626 !important;
-}
-
 /* ============================================================
-   ASSESSMENT URL DISPLAY
+    ASSESSMENT URL DISPLAY
 ============================================================ */
 
 .assessment-url-display {
@@ -309,7 +376,7 @@ body {
     align-items: center;
     padding: 0.75rem;
     background: var(--primary-light);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     border: 1px solid var(--primary);
 }
 
@@ -317,7 +384,7 @@ body {
     flex: 1;
     padding: 0.625rem;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--radius-xs);
     font-size: 0.875rem;
     font-family: "Monaco", "Courier New", monospace;
     background: white;
@@ -330,21 +397,21 @@ body {
 }
 
 /* ============================================================
-   ASSESSMENTS LIST
+    ASSESSMENTS LIST & ITEMS
 ============================================================ */
 
 .assessments-list {
     margin-top: 0.75rem;
     padding: 1rem;
-    background: #f8f9fa;
-    border-radius: 8px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
     border: 1px solid var(--border);
 }
 
 .assessment-item {
     padding: 1rem;
     background: white;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     margin-bottom: 0.75rem;
     border: 1px solid var(--border);
     transition: var(--transition);
@@ -361,15 +428,27 @@ body {
 .assessment-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
+    gap: 1rem;
     margin-bottom: 0.75rem;
     padding-bottom: 0.75rem;
     border-bottom: 1px solid var(--border);
 }
 
+.assessment-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.assessment-meta > div {
+    font-size: 0.875rem;
+}
+
+/* Status Badges */
 .status-badge {
     padding: 0.25rem 0.75rem;
-    border-radius: 12px;
+    border-radius: var(--radius-pill);
     font-size: 0.875rem;
     font-weight: 500;
 }
@@ -384,28 +463,68 @@ body {
     color: #92400e;
 }
 
+/* ============================================================
+   QUESTIONS & ANSWERS
+   ============================================================ */
+
 .assessment-answers {
     margin-top: 0.75rem;
     padding-top: 0.75rem;
     border-top: 1px solid var(--border);
 }
 
-.assessment-answers strong {
+.assessment-answers > strong {
     display: block;
     margin-bottom: 0.5rem;
 }
 
 .answer-item {
-    margin: 0.5rem 0;
-    padding: 0.75rem;
+    margin: 0.75rem 0;
+    padding: 1rem;
     background: var(--primary-light);
-    border-radius: 6px;
+    border-radius: var(--radius-xs);
     font-size: 0.875rem;
     border-left: 3px solid var(--primary);
 }
 
+.answer-item:last-child {
+    margin-bottom: 0;
+}
+
+.answer-item strong {
+    color: var(--primary-dark);
+}
+
+.question-line {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.5rem;
+}
+
+.question-line strong {
+    color: var(--primary-dark);
+    flex-shrink: 0;
+}
+
+.question-text {
+    color: var(--text);
+    flex: 1;
+}
+
+.answer-line {
+    padding-left: 2rem;
+    margin-top: 0.25rem;
+}
+
+.answer-text {
+    margin-top: 0.5rem;
+    padding-left: 1rem;
+    font-size: 0.9rem;
+}
+
 /* ============================================================
-   EMPTY STATE
+    EMPTY STATE
 ============================================================ */
 
 .empty-state {
@@ -434,17 +553,14 @@ body {
 }
 
 /* ============================================================
-   MODAL
+    MODALS
 ============================================================ */
 
 .modal {
     display: none;
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0,0,0,0.5);
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
     z-index: 1000;
     align-items: center;
     justify-content: center;
@@ -472,17 +588,6 @@ body {
     max-width: 400px;
 }
 
-@keyframes modalSlideIn {
-    from {
-        opacity: 0;
-        transform: translateY(-20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
 .modal-header {
     display: flex;
     align-items: center;
@@ -505,12 +610,12 @@ body {
     padding: 0.25rem 0.5rem;
     line-height: 1;
     transition: var(--transition);
+    border-radius: 4px;
 }
 
 .modal-close:hover {
     color: var(--text);
-    background: #f8f9fa;
-    border-radius: 4px;
+    background: var(--bg-secondary);
 }
 
 .modal-body {
@@ -527,8 +632,28 @@ body {
     border-top: 1px solid var(--border);
 }
 
+/* Redirect Modal Content */
+.redirect-content {
+    text-align: center;
+    padding: 1rem 0;
+}
+
+.redirect-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    animation: bounce 1s ease-in-out infinite;
+}
+
+.redirect-message {
+    font-size: 1.125rem;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 1rem;
+    line-height: 1.6;
+}
+
 /* ============================================================
-   VIEW MODAL CONTENT
+    VIEW MODAL CONTENT
 ============================================================ */
 
 .view-section {
@@ -560,7 +685,7 @@ body {
 .view-grid div {
     padding: 0.75rem;
     background: var(--primary-light);
-    border-radius: 6px;
+    border-radius: var(--radius-xs);
     font-size: 0.875rem;
 }
 
@@ -571,15 +696,15 @@ body {
 
 .message-item {
     padding: 0.75rem;
-    background: #f8f9fa;
-    border-radius: 6px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-xs);
     margin-bottom: 0.5rem;
     font-size: 0.875rem;
     border-left: 3px solid var(--primary);
 }
 
 /* ============================================================
-   FORM STYLES
+    FORM STYLES
 ============================================================ */
 
 .form-group {
@@ -597,7 +722,7 @@ body {
     width: 100%;
     padding: 0.75rem;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     font-size: 1rem;
     transition: var(--transition);
 }
@@ -609,7 +734,7 @@ body {
 }
 
 /* ============================================================
-   ALERTS & MESSAGES
+    ALERTS & MESSAGES
 ============================================================ */
 
 .warning-text {
@@ -624,43 +749,7 @@ body {
 }
 
 /* ============================================================
-   TOAST NOTIFICATIONS
-============================================================ */
-
-.toast {
-    position: fixed;
-    bottom: 2rem;
-    right: 2rem;
-    padding: 1rem 1.5rem;
-    background: white;
-    border-radius: 8px;
-    box-shadow: var(--shadow-lg);
-    z-index: 2000;
-    opacity: 0;
-    transform: translateY(20px);
-    transition: var(--transition);
-    border-left: 4px solid var(--primary);
-    max-width: 300px;
-}
-
-.toast.show {
-    opacity: 1;
-    transform: translateY(0);
-}
-
-.toast-success {
-    border-left-color: var(--success);
-}
-
-.toast-error {
-    border-left-color: var(--danger);
-}
-
-.toast-warning {
-    border-left-color: var(--warning);
-}
-/* ============================================================
-   TOAST ENHANCEMENTS
+    TOAST NOTIFICATIONS
 ============================================================ */
 
 .toast-container {
@@ -680,11 +769,11 @@ body {
     gap: 0.75rem;
     padding: 1rem 1.25rem;
     background: white;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     box-shadow: var(--shadow-lg);
     opacity: 0;
     transform: translateX(100%);
-    transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    transition: var(--transition-bounce);
     border-left: 4px solid var(--primary);
     max-width: 350px;
     pointer-events: auto;
@@ -734,6 +823,7 @@ body {
     color: var(--text);
 }
 
+/* Toast Variants */
 .toast-success {
     border-left-color: var(--success);
 }
@@ -767,42 +857,58 @@ body {
 }
 
 /* ============================================================
-   ANIMATION ENHANCEMENTS
+    ANIMATIONS
 ============================================================ */
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
 
 @keyframes flash {
     0%, 100% { background-color: var(--panel-bg); }
     50% { background-color: var(--primary-light); }
 }
 
+@keyframes pulse {
+    0% { box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4); }
+    50% { 
+        box-shadow: 0 4px 25px rgba(102, 126, 234, 0.7);
+        transform: scale(1.02);
+    }
+    100% { box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4); }
+}
+
+@keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+}
+
 .updated-flash {
     animation: flash 1s ease;
 }
 
-/* ============================================================
-   RESPONSIVE TOAST
-============================================================ */
-
-@media (max-width: 768px) {
-    .toast-container {
-        right: 1rem;
-        left: 1rem;
-        bottom: 1rem;
-    }
-
-    .toast {
-        max-width: 100%;
-    }
+.pulse-animation {
+    animation: pulse 1s ease-in-out;
 }
+
 /* ============================================================
-   RESPONSIVE
+    RESPONSIVE
 ============================================================ */
 
 @media (max-width: 768px) {
+    /* Layout */
     .layout {
         padding: 1rem;
     }
 
+    /* Header */
     .header {
         flex-direction: column;
         gap: 1rem;
@@ -813,6 +919,7 @@ body {
         font-size: 1.25rem;
     }
 
+    /* Response Items */
     .response-meta {
         flex-direction: column;
         gap: 0.5rem;
@@ -827,6 +934,7 @@ body {
         min-width: auto;
     }
 
+    /* Actions */
     .actions-row {
         flex-direction: column;
     }
@@ -835,125 +943,67 @@ body {
         width: 100%;
     }
 
+    .delete-assessment-btn {
+        width: 100%;
+        margin-top: 0.5rem;
+    }
+
+    /* Assessments */
+    .assessment-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
     .assessment-url-display {
         flex-direction: column;
     }
 
+    /* Modal */
     .modal-content {
         max-width: 100%;
         max-height: 100vh;
         border-radius: 0;
     }
 
-    .assessment-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.5rem;
-    }
-
-    .toast {
+    /* Toast */
+    .toast-container {
         right: 1rem;
         left: 1rem;
         bottom: 1rem;
-        max-width: none;
+    }
+
+    .toast {
+        max-width: 100%;
+    }
+
+    /* Redirect */
+    .redirect-icon {
+        font-size: 3rem;
+    }
+
+    .redirect-message {
+        font-size: 1rem;
     }
 }
+
+/* ============================================================
+    ACCESSIBILITY
+============================================================ */
 
 @media (prefers-reduced-motion: reduce) {
-    * {
-        animation: none !important;
-        transition: none !important;
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
     }
 }
 
-/* ============================================================
-REDIRECT BUTTON & MODAL
-============================================================ */
-
-.redirect-btn {
-background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-color: white !important;
-border: none !important;
-font-weight: 600;
-box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-}
-
-.redirect-btn:hover:not(:disabled) {
-background: linear-gradient(135deg, #5568d3 0%, #6a4190 100%) !important;
-transform: translateY(-2px);
-box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
-}
-
-/* Pulse animation for redirect button */
-@keyframes pulse {
-0% {
-box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-}
-50% {
-box-shadow: 0 4px 25px rgba(102, 126, 234, 0.7);
-transform: scale(1.02);
-}
-100% {
-box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-}
-}
-
-.pulse-animation {
-animation: pulse 1s ease-in-out;
-}
-
-/* Redirect modal content */
-.redirect-content {
-text-align: center;
-padding: 1rem 0;
-}
-
-.redirect-icon {
-font-size: 4rem;
-margin-bottom: 1rem;
-animation: bounce 1s ease-in-out infinite;
-}
-
-@keyframes bounce {
-0%, 100% {
-transform: translateY(0);
-}
-50% {
-transform: translateY(-10px);
-}
-}
-
-.redirect-message {
-font-size: 1.125rem;
-font-weight: 500;
-color: var(--text);
-margin-bottom: 1rem;
-line-height: 1.6;
-}
-
-/* Redirect confirmation button */
-#confirmRedirectBtn {
-background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-border: none;
-font-weight: 600;
-padding: 0.75rem 1.5rem;
-}
-
-#confirmRedirectBtn:hover:not(:disabled) {
-background: linear-gradient(135deg, #5568d3 0%, #6a4190 100%);
-transform: translateY(-1px);
-}
-
-/* ============================================================
-RESPONSIVE REDIRECT MODAL
-============================================================ */
-
-@media (max-width: 768px) {
-.redirect-icon {
-font-size: 3rem;
-}
-
-.redirect-message {
-font-size: 1rem;
-}
+/* Focus visible for keyboard navigation */
+.control-btn:focus-visible,
+.form-input:focus-visible,
+.modal-close:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
 }

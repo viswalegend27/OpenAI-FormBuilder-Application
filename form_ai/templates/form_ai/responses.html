@@ -132,12 +132,32 @@ MAIN CONTENT
                                 </div>
                             </div>
 
-                            {% if assessment.answers %}
+                            {% if assessment.questions.exists %}
                             <div class="assessment-answers">
-                                <strong>Answers:</strong>
-                                {% for key, value in assessment.answers.items %}
+                                <strong>Questions & Answers:</strong>
+                                {% for question in assessment.questions.all %}
                                 <div class="answer-item">
-                                    <strong>{{ key }}:</strong> {{ value }}
+                                    <div class="question-line">
+                                        <strong>Q{{ question.question_number }}:</strong>
+                                        <span class="question-text">
+                                            {% with qt=question.question_text %}
+                                            {% if qt.q %}{{ qt.q }}{% else %}{{ qt }}{% endif %}
+                                            {% endwith %}
+                                        </span>
+                                    </div>
+                                    <div class="answer-line">
+                                        {% with answer=question.answer %}
+                                        {% if answer %}
+                                        {% if answer.answer_text %}
+                                        <span class="value-provided">→ {{ answer.answer_text }}</span>
+                                        {% else %}
+                                        <span class="value-empty">→ No answer provided</span>
+                                        {% endif %}
+                                        {% else %}
+                                        <span class="value-empty">→ Not answered yet</span>
+                                        {% endif %}
+                                        {% endwith %}
+                                    </div>
                                 </div>
                                 {% endfor %}
                             </div>
