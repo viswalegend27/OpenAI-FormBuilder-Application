@@ -1,186 +1,223 @@
+# models.py
+
 from django.db import models
 from django.utils import timezone
 import uuid
 
 
-class Conversation(models.Model):
+class VoiceConversation(models.Model):
     """
-    Stores conversation data from voice interactions.
-    Each conversation contains messages and extracted user responses.
+    Stores voice conversation data from user interactions.
+    
+    Relationships:
+        - One VoiceConversation → Many TechnicalAssessments
+    
+    JSONB Fields:
+        - messages: List of conversation messages
+        - extracted_info: {name, qualification, experience}
     """
     session_id = models.CharField(
         max_length=255,
         blank=True,
         null=True,
         db_index=True,
-        help_text="Unique session identifier for tracking conversations"
+        help_text="Unique session identifier"
     )
     messages = models.JSONField(
-        help_text="Raw conversation messages between user and AI"
+        default=list,
+        help_text="Raw conversation messages"
     )
-    user_response = models.JSONField(
+    extracted_info = models.JSONField(
         default=dict,
         blank=True,
-        null=True,
-        help_text="Extracted structured data (name, qualification, experience)"
+        help_text="Extracted user data: {name, qualification, experience}"
     )
-    created_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        db_table = 'voice_conversations'
         ordering = ["-created_at"]
-        verbose_name = "Conversation"
-        verbose_name_plural = "Conversations"
+        verbose_name = "Voice Conversation"
+        verbose_name_plural = "Voice Conversations"
 
     def __str__(self):
-        return f"Conversation {self.pk} - {self.created_at.strftime('%Y-%m-%d %H:%M')}"
+        return f"Conversation #{self.pk} - {self.created_at:%Y-%m-%d %H:%M}"
+
+    @property
+    def candidate_name(self):
+        return self.extracted_info.get('name', '')
+
+    @property
+    def candidate_qualification(self):
+        return self.extracted_info.get('qualification', '')
+
+    @property
+    def candidate_experience(self):
+        return self.extracted_info.get('experience', '')
 
 
-class Assessment(models.Model):
+class TechnicalAssessment(models.Model):
     """
-    Represents an assessment session linked to a conversation.
-    Questions and answers are stored in separate related tables.
+    Technical assessment session for a candidate.
+    
+    Relationships:
+        - Many TechnicalAssessments → One VoiceConversation
+        - One TechnicalAssessment → Many AssessmentQuestions
+    
+    JSONB Fields:
+        - transcript: Assessment conversation history
     """
     id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
         editable=False
     )
-    # ForeignKey is on Assessment → Each Assessment points to ONE Conversation
     conversation = models.ForeignKey(
-        # Points to one conversation. Each assessment points to 1 conversation
-        Conversation,
-        # This is my many (N) side which holds the foreign key.
+        VoiceConversation,
         on_delete=models.CASCADE,
-        # Each Conversation can access MULTIPLE Assessments
         related_name='assessments',
-        help_text="Parent conversation that triggered this assessment"
+        help_text="Parent conversation"
     )
-    messages = models.JSONField(
+    transcript = models.JSONField(
         default=list,
-        help_text="Conversation messages during assessment"
+        help_text="Assessment conversation transcript"
     )
-    completed = models.BooleanField(
+    is_completed = models.BooleanField(
         default=False,
-        help_text="Whether all questions have been answered"
+        db_index=True,
+        help_text="Whether assessment is finished"
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        db_table = 'technical_assessments'
         ordering = ["-created_at"]
-        verbose_name = "Assessment"
-        verbose_name_plural = "Assessments"
+        verbose_name = "Technical Assessment"
+        verbose_name_plural = "Technical Assessments"
 
     def __str__(self):
-        return f"Assessment {self.id} - Conversation {self.conversation_id}"
+        status = "✓ Completed" if self.is_completed else "○ Pending"
+        return f"Assessment {self.id} - {status}"
 
     @property
     def total_questions(self):
-        """Returns total number of questions in this assessment."""
+        """Total number of questions."""
         return self.questions.count()
 
     @property
-    def answered_questions(self):
-        """Returns count of answered questions that have non-empty answers."""
+    def answered_count(self):
+        """Count of answered questions."""
         return self.questions.filter(
             answer__isnull=False
         ).exclude(
-            answer__data__answer_text=""
+            answer__response_text='NIL'
+        ).exclude(
+            answer__response_text=''
         ).count()
 
     @property
     def completion_percentage(self):
-        """Calculate assessment completion percentage."""
+        """Calculate completion percentage."""
         total = self.total_questions
-        if total == 0:
-            return 0
-        return (self.answered_questions / total) * 100
+        return round((self.answered_count / total * 100), 1) if total else 0
+
+    def get_qa_pairs(self):
+        """Get all question-answer pairs for display."""
+        pairs = []
+        for question in self.questions.select_related('answer').all():
+            pairs.append({
+                'number': question.sequence_number,
+                'question': question.question_text,
+                'answer': question.answer.response_text if hasattr(question, 'answer') else 'NIL',
+                'answered_at': question.answer.created_at if hasattr(question, 'answer') else None
+            })
+        return pairs
 
 
-class Question(models.Model):
+class AssessmentQuestion(models.Model):
     """
-    Individual question within an assessment.
-    Stores question data as JSONB.
+    Individual question in a technical assessment.
     
-    Data format: {"question_number": 1, "question_text": "..."}
+    Relationships:
+        - Many AssessmentQuestions → One TechnicalAssessment
+        - One AssessmentQuestion → One CandidateAnswer (optional)
     """
-    # Assessment is the foreignKey
     assessment = models.ForeignKey(
-        # Each question to point to one assessment
-        Assessment,
+        TechnicalAssessment,
         on_delete=models.CASCADE,
-        # Pointing towards the questions.
         related_name='questions',
-        help_text="Assessment this question belongs to"
+        help_text="Parent assessment"
     )
-    data = models.JSONField(
-        help_text="Question data stored as JSONB"
+    sequence_number = models.PositiveIntegerField(
+        help_text="Question order (1, 2, 3...)"
+    )
+    question_text = models.TextField(
+        help_text="The question content"
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['data__question_number']
-        verbose_name = "Question"
-        verbose_name_plural = "Questions"
-        indexes = [
-            models.Index(fields=['assessment']),
-        ]
+        db_table = 'assessment_questions'
+        ordering = ['sequence_number']
+        unique_together = ['assessment', 'sequence_number']
+        verbose_name = "Assessment Question"
+        verbose_name_plural = "Assessment Questions"
 
     def __str__(self):
-        question_num = self.data.get('question_number', '?')
-        question_text = self.data.get('question_text', 'No text')
-        return f"Q{question_num}: {question_text[:50]}..."
+        return f"Q{self.sequence_number}: {self.question_text[:50]}..."
 
     @property
-    def question_number(self):
-        """Get question number from JSONB data."""
-        return self.data.get('question_number')
-
-    @property
-    def question_text(self):
-        """Get question text from JSONB data."""
-        return self.data.get('question_text', '')
+    def is_answered(self):
+        """Check if this question has been answered."""
+        return hasattr(self, 'answer') and self.answer.is_valid
 
 
-class Answer(models.Model):
+class CandidateAnswer(models.Model):
     """
-    Answer to a specific question.
-    Stores answer data as JSONB.
+    Candidate's answer to an assessment question.
     
-    Data format: {"answer_text": "...", "question_number": 1}
+    Relationships:
+        - One CandidateAnswer → One AssessmentQuestion (OneToOne)
     """
-    # Here where 1 : 1 (has answer) relationship is initiated.
     question = models.OneToOneField(
-        Question,
+        AssessmentQuestion,
         on_delete=models.CASCADE,
-        # Singular name 1 : 1 (Question) : (Answer)
         related_name='answer',
-        help_text="Question this answer responds to"
+        help_text="The question being answered"
     )
-    data = models.JSONField(
-        default=dict,
+    response_text = models.TextField(
+        default='NIL',
         blank=True,
-        help_text="Answer data stored as JSONB"
+        help_text="Candidate's response"
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = "Answer"
-        verbose_name_plural = "Answers"
+        db_table = 'candidate_answers'
+        verbose_name = "Candidate Answer"
+        verbose_name_plural = "Candidate Answers"
 
     def __str__(self):
-        question_num = self.question.question_number
-        return f"Answer to Q{question_num}"
+        return f"Answer to Q{self.question.sequence_number}"
 
     @property
-    def answer_text(self):
-        """Get answer text from JSONB data."""
-        return self.data.get('answer_text', '')
+    def is_valid(self):
+        """Check if answer has meaningful content."""
+        return bool(
+            self.response_text 
+            and self.response_text.strip() 
+            and self.response_text.strip() != 'NIL'
+        )
 
-    @property
-    def is_answered(self):
-        """Check if this answer has content."""
-        answer_text = self.answer_text
-        return bool(answer_text and str(answer_text).strip())
+    @classmethod
+    def create_or_update(cls, question, text):
+        """Create or update answer for a question."""
+        answer_text = text.strip() if text and text.strip() else 'NIL'
+        answer, created = cls.objects.update_or_create(
+            question=question,
+            defaults={'response_text': answer_text}
+        )
+        return answer, created
