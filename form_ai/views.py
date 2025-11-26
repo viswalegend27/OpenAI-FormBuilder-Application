@@ -95,7 +95,11 @@ def view_responses(request):
         extracted_info__isnull=False
     ).exclude(
         extracted_info={}
-    ).prefetch_related('assessments__questions__answer')
+    ).prefetch_related(
+        'assessments',
+        'assessments__questions',
+        'assessments__questions__answer'
+    )
 
     return render(request, "form_ai/responses.html", {
         "conversations": conversations
@@ -196,7 +200,7 @@ def analyze_conversation(request):
 
     return json_ok({
         "session_id": session_id,
-        "user_response": extracted_data
+        "user_response": extracted_data  # Keep as user_response for frontend compatibility
     })
 
 
@@ -279,7 +283,6 @@ def analyze_assessment(request, assessment_id: str):
 
     logger.info(f"[ANALYZE] Assessment {assessment_id}")
 
-    # Get answers from direct mapping or AI extraction
     qa_mapping = body.get('qa_mapping')
 
     if qa_mapping and isinstance(qa_mapping, dict):
@@ -296,10 +299,10 @@ def analyze_assessment(request, assessment_id: str):
     for question in assessment.questions.all():
         answer_key = f"q{question.sequence_number}"
         answer_text = answers_dict.get(answer_key, "")
-        
+
         CandidateAnswer.create_or_update(question, answer_text)
         saved_answers[answer_key] = answer_text if answer_text else 'NIL'
-        
+
         logger.info(f"[ANALYZE] Saved answer for Q{question.sequence_number}")
 
     # Mark assessment as completed
@@ -327,7 +330,11 @@ def analyze_assessment(request, assessment_id: str):
 def view_response(request, conv_id: int):
     """View full response details for a conversation."""
     conversation = get_object_or_fail(
-        VoiceConversation.objects.prefetch_related('assessments__questions__answer'),
+        VoiceConversation.objects.prefetch_related(
+            'assessments',
+            'assessments__questions',
+            'assessments__questions__answer'
+        ),
         id=conv_id
     )
 
@@ -335,21 +342,39 @@ def view_response(request, conv_id: int):
         created_at__lte=conversation.created_at
     ).count()
 
-    assessments_data = [
-        {
+    assessments_data = []
+    for assessment in conversation.assessments.all():
+        qa_pairs = []
+        for question in assessment.questions.all():
+            answer_text = 'NIL'
+            answered_at = None
+            
+            try:
+                if hasattr(question, 'answer') and question.answer:
+                    answer_text = question.answer.response_text or 'NIL'
+                    answered_at = question.answer.created_at.isoformat() if question.answer.created_at else None
+            except CandidateAnswer.DoesNotExist:
+                pass
+
+            qa_pairs.append({
+                'number': question.sequence_number,
+                'question': question.question_text,
+                'answer': answer_text,
+                'answered_at': answered_at
+            })
+
+        assessments_data.append({
             'id': str(assessment.id),
             'completed': assessment.is_completed,
-            'qa_pairs': assessment.get_qa_pairs(),
+            'qa_pairs': qa_pairs,
             'completion_percentage': assessment.completion_percentage
-        }
-        for assessment in conversation.assessments.all()
-    ]
+        })
 
     return json_ok({
         "response_number": response_number,
         "created_at": conversation.created_at.strftime("%B %d, %Y - %H:%M"),
         "updated_at": conversation.updated_at.strftime("%B %d, %Y - %H:%M"),
-        "user_response": conversation.extracted_info,
+        "user_response": conversation.extracted_info,  # Keep key name for frontend compatibility
         "messages": conversation.messages,
         "assessments": assessments_data
     })
