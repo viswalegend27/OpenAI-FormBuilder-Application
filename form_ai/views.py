@@ -15,6 +15,7 @@ from .models import (
     VoiceConversation,
     TechnicalAssessment,
     AssessmentQuestion,
+    AssessmentQuestionBank,
     CandidateAnswer,
     InterviewForm,
     InterviewQuestion,
@@ -76,13 +77,17 @@ def build_session_payload(request) -> dict:
     payload = C.get_session_payload()
     payload["instructions"] = C.build_default_voice_instructions()
     body = safe_json_parse(request.body) if request.method == "POST" else {}
+    logger.info("[SESSION] Incoming session request. Method=%s, assessment=%s, interview_id=%s",
+                request.method,
+                bool(body.get("assessment_mode")),
+                request.GET.get("interview_id") or body.get("interview_id"))
 
     interview_id = request.GET.get("interview_id") or body.get("interview_id")
     interview = None
     interview_questions: list[str] | None = None
 
     if interview_id:
-        print(f"[SESSION] Requested interview_id={interview_id}")
+        logger.info(f"[SESSION] Requested interview_id={interview_id}")
         interview = (
             InterviewForm.objects.prefetch_related("questions")
             .filter(id=interview_id)
@@ -90,11 +95,22 @@ def build_session_payload(request) -> dict:
         )
         if interview:
             interview_questions = interview.question_texts()
-            print(
+            logger.info(
                 f"[SESSION] Using interview {interview.id} with "
                 f"{len(interview_questions)} questions"
             )
             payload["instructions"] = C.build_interview_instructions(interview)
+
+            # Allow the assistant to trigger verification once it has structured data
+            extraction_keys = DEFAULT_EXTRACTION_KEYS
+            payload["tools"] = [C.build_verify_tool(extraction_keys)]
+            logger.info(
+                "[SESSION] Attached interview instructions and verify tool. interview=%s, questions=%d, tools=%s",
+                interview.id,
+                len(interview_questions),
+                [tool.get("name") for tool in payload.get("tools", [])],
+            )
+
         else:
             logger.warning("Interview %s not found for session payload", interview_id)
 
@@ -106,9 +122,11 @@ def build_session_payload(request) -> dict:
             questions_from_body = body.get("questions")
             if isinstance(questions_from_body, list):
                 interview_questions = [
-                    str(item).strip() for item in questions_from_body if str(item).strip()
+                    str(item).strip()
+                    for item in questions_from_body
+                    if str(item).strip()
                 ]
-                print(
+                logger.info(
                     "[SESSION] Using question payload from frontend: "
                     f"{len(interview_questions)} items"
                 )
@@ -124,12 +142,23 @@ def build_session_payload(request) -> dict:
             experience,
             questions=interview_questions,
         )
-        print(
+        logger.info(
             f"[SESSION] Built assessment persona for {qualification}/{experience} "
             f"with {len(interview_questions)} questions"
         )
         payload.pop("tools", None)
         payload.pop("tool_choice", None)
+
+    instructions_preview = " ".join(
+        (payload.get("instructions") or "").splitlines()
+    )[:200]
+    logger.info(
+        "[SESSION] Payload summary -> instructions_len=%d preview='%s...' tools=%s tool_choice=%s",
+        len(payload.get("instructions") or ""),
+        instructions_preview,
+        [tool.get("name") for tool in payload.get("tools", [])],
+        payload.get("tool_choice"),
+    )
 
     return payload
 
@@ -158,8 +187,8 @@ def clean_verified_data(data: Dict[str, Any] | None) -> Dict[str, str]:
 
 def interview_builder(request):
     """Render interview creation and listing page."""
-    interviews_queryset = (
-        InterviewForm.objects.prefetch_related("questions").order_by("-updated_at")
+    interviews_queryset = InterviewForm.objects.prefetch_related("questions").order_by(
+        "-updated_at"
     )
     interviews = list(interviews_queryset)
     print(f"[INTERVIEW_BUILDER] Loaded {len(interviews)} interviews")
@@ -292,7 +321,9 @@ def create_interview(request):
 
     questions = validate_field(body, "questions", list)
     cleaned_questions = [
-        str(item).strip() for item in questions if isinstance(item, str) and item.strip()
+        str(item).strip()
+        for item in questions
+        if isinstance(item, str) and item.strip()
     ]
 
     if not cleaned_questions:
@@ -360,9 +391,7 @@ def delete_interview_question(request, question_id: int):
     remaining = form.questions.order_by("sequence_number", "id")
     for idx, item in enumerate(remaining, start=1):
         if item.sequence_number != idx:
-            InterviewQuestion.objects.filter(id=item.id).update(
-                sequence_number=idx
-            )
+            InterviewQuestion.objects.filter(id=item.id).update(sequence_number=idx)
 
     return json_ok(
         {
@@ -414,7 +443,6 @@ def save_conversation(request):
     )
 
 
-
 @csrf_exempt
 @require_POST
 @handle_view_errors("Analysis failed")
@@ -457,7 +485,6 @@ def analyze_conversation(request):
     )
 
 
-
 # ============================================================================
 # Assessment Management
 # ============================================================================
@@ -468,7 +495,7 @@ def analyze_conversation(request):
 @handle_view_errors("Failed to generate assessment")
 @transaction.atomic
 def generate_assessment(request, conv_id: int):
-    """Generate assessment with questions."""
+    """Generate assessment with role-specific technical questions."""
     conversation = get_object_or_fail(
         VoiceConversation.objects.select_related("interview_form"), id=conv_id
     )
@@ -492,11 +519,16 @@ def generate_assessment(request, conv_id: int):
             status=400,
         )
 
-    questions_list = interview_form.question_texts()
+    # Get role from interview form
+    role = interview_form.role or interview_form.title
+
+    # Fetch role-based assessment questions from database
+    questions_list = C.get_assessment_questions_for_role(role)
 
     if not questions_list:
+        logger.error(f"[GENERATE] No assessment questions for role: {role}")
         return json_fail(
-            "No interview questions available. Please configure the interview first.",
+            f"No technical questions configured for role '{role}'. Please configure assessment questions first.",
             status=400,
         )
 
@@ -516,16 +548,16 @@ def generate_assessment(request, conv_id: int):
             for idx, text in enumerate(questions_list, start=1)
         ]
     )
-    print(
-        f"[GENERATE] Assessment {assessment.id} created with "
-        f"{len(questions_list)} questions for interview {interview_form.id}"
+    logger.info(
+        "[GENERATE] Assessment %s created with %d role-based questions for role '%s'",
+        assessment.id,
+        len(questions_list),
+        role,
     )
 
     # Generate secure URL
     encrypted_token = token_manager.encrypt(assessment.id)
     assessment_url = request.build_absolute_uri(f"/assessment/{encrypted_token}/")
-
-    logger.info("[GENERATE] Created assessment %s with %d questions", assessment.id, len(questions_list))
 
     return json_ok(
         {
@@ -538,8 +570,7 @@ def generate_assessment(request, conv_id: int):
     )
 
 
-@csrf_exempt
-@require_POST
+@require_http_methods(["POST"])
 @handle_view_errors("Save failed")
 def save_assessment(request, assessment_id: str):
     """Save assessment conversation transcript."""
@@ -550,7 +581,11 @@ def save_assessment(request, assessment_id: str):
     assessment.transcript = messages
     assessment.save(update_fields=["transcript", "updated_at"])
 
-    logger.info("[ASSESSMENT] Saved transcript for %s (%d messages)", assessment_id, len(messages))
+    logger.info(
+        "[ASSESSMENT] Saved transcript for %s (%d messages)",
+        assessment_id,
+        len(messages),
+    )
 
     return json_ok(
         {"assessment_id": str(assessment.id), "message_count": len(messages)}

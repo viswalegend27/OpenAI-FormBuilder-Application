@@ -25,6 +25,7 @@ _QUESTIONS_PATH = settings.AI_QUESTIONS_PATH
 # File Reading
 # ============================================================================
 
+
 def _read_file(file_path: Path) -> str | None:
     """Read file content. Returns None on error."""
     try:
@@ -38,10 +39,10 @@ def _read_file(file_path: Path) -> str | None:
 def _parse_numbered_list(content: str) -> List[str]:
     """Parse numbered list into list of strings."""
     items = []
-    for line in content.split('\n'):
+    for line in content.split("\n"):
         line = line.strip()
-        if line and line[0].isdigit() and '. ' in line:
-            text = line.split('. ', 1)[1].strip()
+        if line and line[0].isdigit() and ". " in line:
+            text = line.split(". ", 1)[1].strip()
             if text:
                 items.append(text)
     return items
@@ -56,6 +57,7 @@ def _format_questions(questions: Sequence[str]) -> str:
 # Content Getters (Cached)
 # ============================================================================
 
+
 @lru_cache(maxsize=1)
 def get_persona() -> str:
     """Get AI persona instructions."""
@@ -65,45 +67,9 @@ def get_persona() -> str:
     return content
 
 
-@lru_cache(maxsize=1)
-def get_questions() -> List[str]:
-    """
-    Get assessment questions as list of strings.
-    
-    Returns:
-        List of question text strings: ["Question 1?", "Question 2?", ...]
-    """
-    content = _read_file(_QUESTIONS_PATH)
-    if not content:
-        raise ValueError("Questions file is missing or empty")
-    
-    questions = _parse_numbered_list(content)
-    if not questions:
-        raise ValueError("No valid questions found")
-    
-    return questions
-
-
 def clear_cache():
     """Clear cached content."""
     get_persona.cache_clear()
-    get_questions.cache_clear()
-
-
-# ========================================================================
-# Voice Interview Defaults
-# ========================================================================
-
-DEFAULT_VOICE_QUESTIONS: List[str] = [
-    "What is your full name?",
-    "What is your highest qualification? (e.g., B.E. Computer Science 2025)",
-    "How many years of relevant experience do you have?",
-]
-
-
-def get_default_voice_questions() -> List[str]:
-    """Return a copy of the fallback voice interview questions."""
-    return list(DEFAULT_VOICE_QUESTIONS)
 
 
 def _compose_voice_instructions(
@@ -130,20 +96,26 @@ def _compose_voice_instructions(
     return f"""{persona}
 
 {context_section}You are interviewing a candidate for the {role_label} position. Follow this structure:
-- Greet the candidate and explain that you will ask {question_count} {question_label}
-- Ask the questions one at a time, waiting for their answer before moving on
-- Briefly confirm each answer so the candidate knows you captured it
+- Start by collecting baseline profile data. Confirm their full name, highest qualification (degree, specialization, graduation year), and total years of relevant experience (0 is valid). If these items already exist in the plan, you can cover them when that question arrives; otherwise ask them upfront so you can summarise and verify accurately.
+- Let them know you have {question_count} additional {question_label} and work through the plan below one question at a time, waiting for their response before moving on.
+- Briefly restate or confirm each answer so the candidate knows you captured it correctly.
 
 Questions to ask:
 {questions_formatted}
 
-After the final question, provide a concise summary of their answers, offer verification, and thank them."""
+After the final question, provide a concise summary of their answers. Ask if they'd like to verify or correct their details, and when they confirm call the `verify_information` tool with the latest name, qualification, and experience before thanking them for their time."""
 
 
 def build_default_voice_instructions() -> str:
     """Return instructions for the fallback interview flow."""
+    # Default fallback questions when no interview form is provided
+    default_questions = [
+        "What is your full name?",
+        "What is your highest qualification? (e.g., B.E. Computer Science 2025)",
+        "How many years of relevant experience do you have?",
+    ]
     return _compose_voice_instructions(
-        get_default_voice_questions(),
+        default_questions,
         "internship screening",
         context_note="Use this default plan only when no custom interview form ID is provided.",
     )
@@ -153,7 +125,8 @@ def build_default_voice_instructions() -> str:
 # Session Configuration
 # ============================================================================
 
-def _get_env(name: str, default: str = '') -> str:
+
+def _get_env(name: str, default: str = "") -> str:
     return os.getenv(name, default)
 
 
@@ -178,31 +151,47 @@ def get_session_payload() -> dict:
             "type": "server_vad",
             "threshold": 0.8,
             "prefix_padding_ms": 300,
-            "silence_duration_ms": 1000
+            "silence_duration_ms": 1000,
         },
-        "tools": [
-            {
-                "type": "function",
-                "name": "verify_information",
-                "description": "Show verification popup for user to confirm their information",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "name": {"type": "string", "description": "User's full name"},
-                        "qualification": {"type": "string", "description": "User's qualification"},
-                        "experience": {"type": "string", "description": "User's experience"}
-                    },
-                    "required": ["name", "qualification", "experience"]
-                }
-            }
-        ],
-        "tool_choice": "auto"
+        "tools": [],  # Will be populated dynamically per interview
+        "tool_choice": "auto",
     }
+
+
+def build_verify_tool(extraction_keys: List[str]) -> dict:
+    """Build dynamic verify_information tool based on interview questions."""
+    properties = {
+        key: {"type": "string", "description": f"Captured {key}"}
+        for key in extraction_keys
+    }
+
+    return {
+        "type": "function",
+        "name": "verify_information",
+        "description": "Show verification popup for user to confirm their information",
+        "parameters": {
+            "type": "object",
+            "properties": properties,
+            "required": extraction_keys,
+        },
+    }
+
+
+def get_assessment_questions_for_role(role: str) -> List[str]:
+    """Retrieve assessment questions dynamically from database for a role."""
+    from .models import AssessmentQuestionBank
+
+    questions = AssessmentQuestionBank.get_questions_for_role(role)
+    if not questions:
+        logger.warning(f"No assessment questions found for role: {role}")
+        return []
+    return questions
 
 
 # ============================================================================
 # Assessment Configuration
 # ============================================================================
+
 
 def get_assessment_persona(
     qualification: str,

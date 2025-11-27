@@ -344,19 +344,13 @@ async function startAssessment() {
 
         status && (status.textContent = "Getting session...");
         // -- [API CALL]: Create ephemeral session on backend (assessment mode) and retrieve ephemeral key
-        const questionTexts = (window.ASSESSMENT_QUESTIONS || []).map(
-            (item) => item.text || item.q || ""
-        );
-
         const sessResp = await fetch("/api/session", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 assessment_mode: true,
                 qualification: window.USER_INFO?.qualification || "",
-                experience: window.USER_INFO?.experience || "",
-                interview_id: window.INTERVIEW_ID || "",
-                questions: questionTexts
+                experience: window.USER_INFO?.experience || ""
             })
         });
 

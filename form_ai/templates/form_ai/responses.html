@@ -13,21 +13,15 @@
 
 <body>
 
-    <!-- ============================================================
-         HEADER SECTION
-    ============================================================= -->
     <header class="header">
-        <h1>Interview Responses</h1>
+        <div>
+            <h1>Interview Responses</h1>
+        </div>
         <nav class="header-actions">
-            <a href="{% url 'interview_builder' %}" class="control-btn">
-                Back to Builder
-            </a>
+            <a href="{% url 'interview_builder' %}" class="control-btn">Back to Builder</a>
         </nav>
     </header>
 
-    <!-- ============================================================
-         MAIN CONTENT
-    ============================================================= -->
     <main class="layout">
 
         {% if conversations %}
@@ -35,32 +29,26 @@
             {% for conv in conversations %}
             <li class="response-container" data-conv-id="{{ conv.id }}">
 
-                <!-- ==================== Meta Information ==================== -->
                 <div class="response-meta">
                     <div class="meta-row">
-                        <span class="meta-label">Response #:</span>
-                        <span class="meta-value">{{ forloop.counter }}</span>
-                    </div>
-                    <div class="meta-row">
-                        <span class="meta-label">Date:</span>
+                        <span class="meta-label">#{{ forloop.counter }}</span>
                         <span class="meta-value">{{ conv.created_at|date:"M d, Y - H:i" }}</span>
                     </div>
                     {% if conv.interview_form %}
                     <div class="meta-row">
-                        <span class="meta-label">Interview:</span>
+                        <span class="meta-label">Interview</span>
                         <span class="meta-value">{{ conv.interview_form.title }}</span>
                     </div>
                     {% endif %}
                 </div>
 
-                <!-- ==================== Candidate Information ==================== -->
                 {% if conv.extracted_info %}
                 <div class="response-data">
-                    <strong>Candidate Information:</strong>
+                    <strong>Candidate Information</strong>
                     <div class="response-fields">
                         {% for key, value in conv.extracted_info.items %}
                         <div class="response-field">
-                            <span class="response-key">{{ key|title }}:</span>
+                            <span class="response-key">{{ key|title }}</span>
                             <span class="response-value {% if value %}value-provided{% else %}value-empty{% endif %}">
                                 {{ value|default:"Not provided" }}
                             </span>
@@ -70,32 +58,19 @@
                 </div>
                 {% endif %}
 
-                <!-- ==================== Action Buttons ==================== -->
                 <div class="response-actions">
-
-                    <!-- Primary Actions Row -->
                     <div class="actions-row">
-                        <button class="control-btn view-btn" data-conv-id="{{ conv.id }}" title="View full details">
-                            View
-                        </button>
+                        <button class="control-btn view-btn" data-conv-id="{{ conv.id }}"
+                            title="View full details">View</button>
                         <button class="control-btn edit-btn" data-conv-id="{{ conv.id }}"
-                            title="Edit candidate information">
-                            Edit
-                        </button>
-                        <button class="control-btn delete-btn" data-conv-id="{{ conv.id }}"
-                            title="Delete this response">
-                            Delete
-                        </button>
+                            title="Edit information">Edit</button>
+                        <button class="control-btn danger delete-btn" data-conv-id="{{ conv.id }}"
+                            title="Delete response">Delete</button>
                     </div>
 
-                    <!-- Assessment Actions -->
                     <div class="actions-row">
-                        <button class="control-btn primary generate-assessment-btn" data-conv-id="{{ conv.id }}">
-                            Generate Assessment URL
-                        </button>
-                        <button class="control-btn redirect-btn" data-conv-id="{{ conv.id }}" style="display:none;">
-                            Start Assessment
-                        </button>
+                        <button class="control-btn primary generate-assessment-btn"
+                            data-conv-id="{{ conv.id }}">Generate Assessment</button>
                         {% if conv.assessments.exists %}
                         <button class="control-btn view-assessments-btn" data-conv-id="{{ conv.id }}">
                             View Assessments ({{ conv.assessments.count }})
@@ -103,13 +78,11 @@
                         {% endif %}
                     </div>
 
-                    <!-- Assessment URL Display -->
                     <div class="assessment-url-display" id="url-display-{{ conv.id }}" style="display:none;">
                         <input type="text" readonly class="url-input" aria-label="Assessment URL" />
                         <button class="control-btn copy-btn">Copy</button>
                     </div>
 
-                    <!-- Assessments List -->
                     {% if conv.assessments.exists %}
                     <div class="assessments-list" id="assessments-{{ conv.id }}" style="display:none;">
                         {% for assessment in conv.assessments.all %}
@@ -130,7 +103,7 @@
 
                             {% if assessment.questions.exists %}
                             <div class="assessment-answers">
-                                <strong>Questions & Answers:</strong>
+                                <strong>Q&A</strong>
                                 {% for question in assessment.questions.all %}
                                 <div class="answer-item">
                                     <div class="question-line">
@@ -141,10 +114,8 @@
                                         {% with answer=question.answer %}
                                         {% if answer and answer.response_text and answer.response_text != "NIL" %}
                                         <span class="value-provided">{{ answer.response_text }}</span>
-                                        {% elif answer %}
-                                        <span class="value-empty">No answer provided</span>
                                         {% else %}
-                                        <span class="value-empty">Not answered yet</span>
+                                        <span class="value-empty">Not answered</span>
                                         {% endif %}
                                         {% endwith %}
                                     </div>
@@ -164,9 +135,7 @@
         </ul>
 
         {% else %}
-        <!-- Empty State -->
         <div class="empty-state">
-            <div class="empty-icon"></div>
             <h3>No Responses Yet</h3>
             <p>Complete a voice interview to see responses here.</p>
             <a href="{% url 'interview_builder' %}" class="control-btn primary">Start Interview</a>
@@ -175,9 +144,7 @@
 
     </main>
 
-    <!-- ============================================================
-         VIEW MODAL
-    ============================================================= -->
+    <!-- Modals -->
     <div id="viewModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -191,13 +158,10 @@
         </div>
     </div>
 
-    <!-- ============================================================
-         EDIT MODAL
-    ============================================================= -->
     <div id="editModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Edit Candidate Information</h2>
+                <h2>Edit Information</h2>
                 <button class="modal-close" aria-label="Close">&times;</button>
             </div>
             <div class="modal-body">
@@ -209,14 +173,11 @@
             </div>
             <div class="modal-footer">
                 <button class="control-btn modal-close">Cancel</button>
-                <button class="control-btn primary" id="saveEditBtn">Save Changes</button>
+                <button class="control-btn primary" id="saveEditBtn">Save</button>
             </div>
         </div>
     </div>
 
-    <!-- ============================================================
-         DELETE CONFIRMATION MODAL
-    ============================================================= -->
     <div id="deleteModal" class="modal">
         <div class="modal-content modal-small">
             <div class="modal-header">
@@ -224,37 +185,13 @@
                 <button class="modal-close" aria-label="Close">&times;</button>
             </div>
             <div class="modal-body">
-                <p class="warning-text">Are you sure you want to delete this response?</p>
-                <p class="muted-text">This action cannot be undone. All associated assessments will also be deleted.</p>
+                <p class="warning-text">Delete this response?</p>
+                <p class="muted-text">This action cannot be undone.</p>
                 <input type="hidden" id="delete-conv-id">
             </div>
             <div class="modal-footer">
                 <button class="control-btn modal-close">Cancel</button>
                 <button class="control-btn danger" id="confirmDeleteBtn">Delete</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- ============================================================
-         REDIRECT CONFIRMATION MODAL
-    ============================================================= -->
-    <div id="redirectModal" class="modal">
-        <div class="modal-content modal-small">
-            <div class="modal-header">
-                <h2>Start Assessment</h2>
-                <button class="modal-close" aria-label="Close">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="redirect-content">
-                    <div class="redirect-icon"></div>
-                    <p class="redirect-message">You are about to start the technical assessment.</p>
-                    <p class="muted-text">Make sure your microphone is enabled.</p>
-                </div>
-                <input type="hidden" id="redirect-url">
-            </div>
-            <div class="modal-footer">
-                <button class="control-btn modal-close">Cancel</button>
-                <button class="control-btn primary" id="confirmRedirectBtn">Start Assessment</button>
             </div>
         </div>
     </div>

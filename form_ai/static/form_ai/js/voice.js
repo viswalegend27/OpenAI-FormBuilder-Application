@@ -14,6 +14,7 @@ window._dc = null;
 window._micStream = null;
 window._remoteEl = null;
 window._verifiedData = null;
+window._verificationToolCallId = null;
 
 const INTERVIEW_ID = window.INTERVIEW_ID || "";
 const voiceLog = (...args) => console.log("[Voice]", ...args);
@@ -161,6 +162,33 @@ function buildVerificationSummary(cleaned) {
     return lines.join("\n");
 }
 
+function resetVerificationToolContext() {
+    window._verificationToolCallId = null;
+}
+
+function sendVerifyToolOutput(status, data = null) {
+    if (!window._verificationToolCallId || !window._dc || window._dc.readyState !== "open") {
+        return false;
+    }
+
+    const output = { status };
+    if (data) {
+        output.data = data;
+    }
+
+    window._dc.send(JSON.stringify({
+        type: "conversation.item.create",
+        item: {
+            type: "function_call_output",
+            call_id: window._verificationToolCallId,
+            output: JSON.stringify(output)
+        }
+    }));
+    window._dc.send(JSON.stringify({ type: "response.create" }));
+    resetVerificationToolContext();
+    return true;
+}
+
 // Setup verification popup handlers
 (() => {
     $("verify-confirm")?.addEventListener("click", () => {
@@ -170,10 +198,19 @@ function buildVerificationSummary(cleaned) {
             experience: $("verify-experience").value.trim()
         };
         hideVerificationPopup();
-        toast("Information verified");
 
         const cleaned = getVerifiedDataPayload();
-        if (cleaned && window._dc && window._dc.readyState === "open") {
+        if (!cleaned) {
+            toast("Add details before confirming");
+            return;
+        }
+
+        toast("Information verified");
+        if (sendVerifyToolOutput("verified", cleaned)) {
+            return;
+        }
+
+        if (window._dc && window._dc.readyState === "open") {
             const summaryText = buildVerificationSummary(cleaned);
             pushMessage("user", summaryText);
 
@@ -194,6 +231,10 @@ function buildVerificationSummary(cleaned) {
 
     $("verify-cancel")?.addEventListener("click", () => {
         hideVerificationPopup();
+        if (sendVerifyToolOutput("skipped")) {
+            toast("Skipped verification");
+            return;
+        }
         toast("Verification cancelled");
     });
 })();
@@ -287,24 +328,22 @@ async function startVoice() {
 
                 // Handle tool calls
                 if (msg.type === "response.function_call_arguments.done") {
+                    if (currentAssistant && currentAssistant.bubbleEl && !currentAssistant.bubbleEl.textContent.trim()) {
+                        currentAssistant.msgEl.remove();
+                    }
+                    currentAssistant = null;
+                    isNewAssistantResponse = true;
+
                     const funcName = msg.name;
                     const args = JSON.parse(msg.arguments || "{}");
                     
                     console.log("Tool call:", funcName, args);
                     
                     if (funcName === "verify_information") {
+                        // Store the call_id and args for later verification
+                        window._verificationToolCallId = msg.call_id;
+                        appendMessageToDom("assistant", "Before we conclude, would you like to verify and confirm your information?", true);
                         showVerificationPopup(args);
-                        
-                        // Send tool response
-                        // -- [API CALL]: Return tool output back to AI (function tool result via DataChannel)
-                        dc.send(JSON.stringify({
-                            type: "conversation.item.create",
-                            item: {
-                                type: "function_call_output",
-                                call_id: msg.call_id,
-                                output: JSON.stringify({ status: "popup_shown" })
-                            }
-                        }));
                     }
                     return;
                 }

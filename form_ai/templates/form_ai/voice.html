@@ -3,7 +3,8 @@
 
 <head>
   <meta charset="utf-8" />
-  <title>Voice FormBuilder</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voice Interview - Form Builder</title>
   {% load static %}
   <link rel="icon" href="{% static 'form_ai/favicon.ico' %}" sizes="any">
   <link rel="stylesheet" href="{% static 'form_ai/css/voice.css' %}">
@@ -20,12 +21,13 @@
       </p>
     </div>
     <nav class="header-actions" aria-label="Primary actions">
-      <a href="{% url 'interview_builder' %}" class="control-btn" aria-label="Create another interview">New Interview</a>
+      <a href="{% url 'interview_builder' %}" class="control-btn" aria-label="Create another interview">New
+        Interview</a>
       <a href="{% url 'view_responses' %}" class="control-btn" aria-label="View responses">Responses</a>
     </nav>
   </header>
 
-  <main class="layout">
+  <main class="layout with-sidebar">
     <section class="workspace" aria-label="Interview details">
       <div class="details-card">
         <h2>Question plan</h2>
@@ -35,7 +37,7 @@
         <ul class="question-list">
           {% for question in questions %}
           <li>
-            <span class="question-number">Q{{ question.number }}</span>
+            <span class="question-number">{{ question.number }}</span>
             <span class="question-text">{{ question.text }}</span>
           </li>
           {% endfor %}
@@ -53,7 +55,7 @@
 
         <div class="panel-controls" role="region" aria-label="Recording controls">
           <div class="controls-left">
-            <button id="start" class="control-btn">Start</button>
+            <button id="start" class="control-btn primary">Start</button>
             <button id="stop" class="control-btn" disabled>Stop</button>
           </div>
           <div class="controls-right">
@@ -69,26 +71,26 @@
   </main>
 
   <!-- Verification Popup -->
-  <div id="verification-popup" class="popup-overlay" style="display:none;">
+  <div id="verification-popup" class="popup-overlay">
     <div class="popup-content">
       <h2>Verify Your Information</h2>
       <div class="popup-body">
         <div class="field-group">
           <label>Name:</label>
-          <input type="text" id="verify-name" />
+          <input type="text" id="verify-name" placeholder="Your full name" />
         </div>
         <div class="field-group">
           <label>Qualification:</label>
-          <input type="text" id="verify-qualification" />
+          <input type="text" id="verify-qualification" placeholder="Your qualification" />
         </div>
         <div class="field-group">
           <label>Experience:</label>
-          <input type="text" id="verify-experience" />
+          <input type="text" id="verify-experience" placeholder="Years of experience" />
         </div>
       </div>
       <div class="popup-actions">
-        <button id="verify-confirm" class="control-btn primary">Confirm</button>
         <button id="verify-cancel" class="control-btn">Cancel</button>
+        <button id="verify-confirm" class="control-btn primary">Confirm</button>
       </div>
     </div>
   </div>

@@ -17,7 +17,9 @@ class InterviewForm(models.Model):
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    title = models.CharField(max_length=255, help_text="Internal name for the interview")
+    title = models.CharField(
+        max_length=255, help_text="Internal name for the interview"
+    )
     role = models.CharField(
         max_length=255,
         blank=True,
@@ -60,7 +62,9 @@ class InterviewQuestion(models.Model):
         related_name="questions",
         help_text="Parent interview definition",
     )
-    sequence_number = models.PositiveIntegerField(help_text="Display order (1, 2, 3, ...)")
+    sequence_number = models.PositiveIntegerField(
+        help_text="Display order (1, 2, 3, ...)"
+    )
     question_text = models.TextField(help_text="Question content")
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -308,3 +312,44 @@ class CandidateAnswer(models.Model):
             question=question, defaults={"response_text": answer_text}
         )
         return answer, created
+
+
+class AssessmentQuestionBank(models.Model):
+    """
+    Bank of technical questions for assessments, organized by role.
+
+    Relationships:
+        - Many AssessmentQuestionBank → One InterviewForm (optional)
+    """
+
+    role = models.CharField(
+        max_length=255,
+        db_index=True,
+        help_text="Role or position (e.g., Python Intern, Backend Developer)",
+    )
+    sequence_number = models.PositiveIntegerField(
+        help_text="Question order (1, 2, 3...)"
+    )
+    question_text = models.TextField(help_text="Technical question content")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "assessment_question_bank"
+        ordering = ["role", "sequence_number"]
+        unique_together = ["role", "sequence_number"]
+        verbose_name = "Assessment Question Bank"
+        verbose_name_plural = "Assessment Question Bank"
+
+    def __str__(self):
+        return f"{self.role} / Q{self.sequence_number}"
+
+    @classmethod
+    def get_questions_for_role(cls, role: str) -> list:
+        """Retrieve all questions for a given role."""
+        if not role or not role.strip():
+            return []
+        return list(
+            cls.objects.filter(role__iexact=role.strip())
+            .order_by("sequence_number")
+            .values_list("question_text", flat=True)
+        )

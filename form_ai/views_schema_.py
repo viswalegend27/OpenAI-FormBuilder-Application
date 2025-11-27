@@ -126,8 +126,15 @@ class OpenAIClient:
     
     def create_realtime_session(self, payload: Dict[str, Any], timeout: int = 20) -> Dict[str, Any]:
         """Create a realtime session."""
+        tool_names = [tool.get("name") for tool in payload.get("tools", [])]
+        logger.info(
+            "[OPENAI] create_realtime_session -> model=%s, tools=%s, instructions_len=%d",
+            payload.get("model"),
+            tool_names,
+            len(payload.get("instructions") or ""),
+        )
         data = post_json(self.REALTIME_URL, self.headers, payload, timeout=timeout)
-        
+
         if not data.get("client_secret", {}).get("value"):
             logger.warning("Session created but client_secret.value is missing")
         

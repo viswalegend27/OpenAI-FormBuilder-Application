@@ -3,7 +3,8 @@
 
 <head>
     <meta charset="utf-8" />
-    <title>Technical Assessment</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Technical Assessment - Form Builder</title>
     {% load static %}
     <link rel="icon" href="{% static 'form_ai/favicon.ico' %}">
     <link rel="stylesheet" href="{% static 'form_ai/css/interview.css' %}">
@@ -13,19 +14,21 @@
 
     <header class="header">
         <div>
-            <p class="eyebrow">Assessment Interview</p>
-            <h1>{{ interview_title|default:"Technical Assessment" }}</h1>
+            <p class="eyebrow">Technical Assessment</p>
+            <h1>{{ interview_title|default:"Assessment Interview" }}</h1>
+            <p class="subtitle">Candidate: {{ user_info.name|default:"Candidate" }}</p>
         </div>
     </header>
 
-    <main class="layout">
-        <aside class="chat-wrapper">
+    <main class="layout with-sidebar" style="justify-content: center;">
+        <aside class="chat-wrapper" style="max-width: 800px;">
             <div class="panel">
 
                 <div class="panel-header">
                     <h2>Assessment Interview</h2>
-                    <p style="font-size:0.875rem; color:#666; margin-top:0.5rem;">
-                        {{ user_info.name|default:"Candidate" }} - {{ user_info.qualification|default:"" }}
+                    <p>
+                        <strong>{{ user_info.name|default:"Candidate" }}</strong> -
+                        <span class="muted-text">{{ user_info.qualification|default:"" }}</span>
                     </p>
                 </div>
 
