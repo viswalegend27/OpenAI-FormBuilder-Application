@@ -344,13 +344,25 @@ async function startAssessment() {
 
         status && (status.textContent = "Getting session...");
         // -- [API CALL]: Create ephemeral session on backend (assessment mode) and retrieve ephemeral key
+        const questionPayload = Array.isArray(window.ASSESSMENT_QUESTIONS)
+            ? window.ASSESSMENT_QUESTIONS.map((item) => {
+                  if (typeof item === "string") return item;
+                  if (item && typeof item === "object") {
+                      return item.text || item.question || "";
+                  }
+                  return "";
+              }).filter((text) => text && text.trim())
+            : [];
+
         const sessResp = await fetch("/api/session", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 assessment_mode: true,
                 qualification: window.USER_INFO?.qualification || "",
-                experience: window.USER_INFO?.experience || ""
+                experience: window.USER_INFO?.experience || "",
+                questions: questionPayload,
+                interview_id: window.INTERVIEW_ID || null
             })
         });
 
