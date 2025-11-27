@@ -1,6 +1,7 @@
 # views.py
 
 import logging
+import re
 from typing import Any, Dict
 from django.core.signing import TimestampSigner, BadSignature, SignatureExpired
 from django.db import transaction
@@ -23,6 +24,7 @@ from .models import (
 from .views_schema_ import (
     AssessmentExtractor,
     OpenAIClient,
+    QuestionIntentSummarizer,
     get_object_or_fail,
     handle_view_errors,
     safe_json_parse,
@@ -70,6 +72,51 @@ token_manager = AssessmentTokenManager()
 # Verification Schema Helpers
 # ============================================================================
 
+SLUG_PATTERN = re.compile(r"[^a-z0-9_]+")
+QUESTION_PREFIXES = [
+    "what is your",
+    "what's your",
+    "what are your",
+    "what are the",
+    "what is the",
+    "what's the",
+    "what would be your",
+    "what would you say is your",
+    "what are you",
+    "what kind of",
+    "what types of",
+    "tell me about your",
+    "tell us about your",
+    "tell me about the",
+    "tell us about the",
+    "can you describe your",
+    "can you describe the",
+    "describe your",
+    "describe the",
+    "do you have any",
+]
+STOPWORDS = {
+    "your",
+    "the",
+    "any",
+    "of",
+    "for",
+    "you",
+    "about",
+    "please",
+    "kind",
+    "type",
+    "types",
+    "are",
+    "is",
+    "do",
+    "can",
+    "tell",
+    "me",
+    "us",
+}
+QUESTION_INTENT_CACHE: dict[str, dict[str, Any]] = {}
+
 BASE_VERIFICATION_FIELDS: list[dict[str, Any]] = [
     {
         "key": "name",
@@ -104,23 +151,138 @@ BASE_VERIFICATION_FIELDS: list[dict[str, Any]] = [
 ]
 
 
+def slugify_field_key(value: str, fallback: str = "field") -> str:
+    """Convert arbitrary text into a safe snake_case key."""
+    if not value:
+        value = fallback
+
+    value = value.strip().lower()
+    value = re.sub(r"[\s\-]+", "_", value)
+    value = SLUG_PATTERN.sub("", value)
+    value = re.sub(r"_+", "_", value).strip("_")
+
+    if not value:
+        value = fallback
+
+    if value[0].isdigit():
+        value = f"field_{value}"
+
+    return value
+
+
+def fallback_question_label(text: str) -> str:
+    """Derive a short label from the original question text."""
+    cleaned = (text or "").strip()
+    cleaned = re.sub(r"[\?\.:]+$", "", cleaned)
+    if len(cleaned) > 70:
+        cleaned = cleaned[:67].rsplit(" ", 1)[0] + "..."
+    return cleaned or "Response"
+
+
+def strip_question_prefix(text: str) -> str:
+    lowered = text.lower()
+    for prefix in QUESTION_PREFIXES:
+        if lowered.startswith(prefix):
+            return text[len(prefix) :].strip()
+    return text.strip()
+
+
+def derive_concept_label(question_text: str) -> str:
+    """Heuristic fallback to convert a question into a short noun phrase."""
+    working = strip_question_prefix(question_text)
+    working = re.sub(r"[^\w\s]", " ", working).lower()
+    words = [word for word in working.split() if word]
+    filtered = [w for w in words if w not in STOPWORDS]
+    candidates = filtered or words
+    if not candidates:
+        return fallback_question_label(question_text)
+    concept_words = candidates[:4]
+    return " ".join(word.capitalize() for word in concept_words)
+
+
+def normalize_field_label(question_text: str, metadata_label: str | None) -> str:
+    """Enforce concise title-style labels, falling back to heuristics if needed."""
+    candidate = (metadata_label or "").strip()
+    question_clean = (question_text or "").strip()
+
+    if not candidate:
+        candidate = derive_concept_label(question_clean)
+
+    normalized = re.sub(r"[\?\.:]+$", "", candidate).strip()
+    normalized = re.sub(r"\s+", " ", normalized)
+
+    # If the model simply echoed the question or produced a very long label, fall back.
+    if (
+        not normalized
+        or len(normalized) > 40
+        or normalized.lower() == question_clean.lower()
+        or normalized.count(" ") >= 5
+    ):
+        normalized = derive_concept_label(question_clean)
+
+    return normalized
+
+
+def ensure_unique_key(base_key: str, used_keys: set[str]) -> str:
+    """Ensure generated keys remain unique within the schema."""
+    key = base_key
+    suffix = 2
+    while key in used_keys:
+        key = f"{base_key}_{suffix}"
+        suffix += 1
+    used_keys.add(key)
+    return key
+
+
+def summarize_question_intents(
+    interview: InterviewForm, questions: list[InterviewQuestion]
+) -> dict[str, dict[str, str]]:
+    """Use the LLM-driven summarizer with lightweight caching."""
+    cache_key = str(interview.id)
+    freshness_token = f"{interview.updated_at.timestamp()}:{len(questions)}"
+
+    cached = QUESTION_INTENT_CACHE.get(cache_key)
+    if cached and cached.get("token") == freshness_token:
+        return cached["data"]
+
+    summarizer = QuestionIntentSummarizer()
+    payload = [
+        {
+            "id": str(question.id),
+            "question": question.question_text.strip(),
+            "sequence": question.sequence_number,
+        }
+        for question in questions
+        if question.question_text and question.question_text.strip()
+    ]
+
+    summaries = summarizer.summarize(payload)
+    QUESTION_INTENT_CACHE[cache_key] = {"token": freshness_token, "data": summaries}
+    return summaries
+
+
 def duplicate_fields(fields: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Return a shallow copy of field definitions to avoid mutation."""
     return [field.copy() for field in fields]
 
 
-def build_question_field(question: InterviewQuestion) -> dict[str, Any]:
+def build_question_field(
+    question: InterviewQuestion, metadata: dict[str, Any], used_keys: set[str]
+) -> dict[str, Any]:
     """Create a verification field descriptor for a specific interview question."""
+    label = normalize_field_label(question.question_text, metadata.get("label"))
+    description = metadata.get("summary") or question.question_text.strip()
+    raw_key = metadata.get("key") or label
+    slug = slugify_field_key(raw_key, fallback=f"question_{question.sequence_number}")
+    key = ensure_unique_key(slug, used_keys)
     return {
-        "key": f"question_{question.sequence_number}",
-        "label": question.question_text.strip(),
+        "key": key,
+        "label": label,
         "placeholder": "Confirm the candidate's answer",
-        "description": (
-            f"Candidate's answer for Q{question.sequence_number}: "
-            f"{question.question_text.strip()}"
-        ),
+        "description": description,
         "sequence_number": question.sequence_number,
         "question_id": str(question.id),
+        "helper_text": question.question_text.strip(),
         "required": True,
         "type": "textarea",
         "input_type": "text",
@@ -135,8 +297,13 @@ def build_verification_fields(interview: InterviewForm | None) -> list[dict[str,
     if not interview:
         return fields
 
-    for question in interview.ordered_questions():
-        fields.append(build_question_field(question))
+    ordered_questions = list(interview.ordered_questions())
+    question_summaries = summarize_question_intents(interview, ordered_questions)
+    used_keys = {field["key"] for field in fields}
+
+    for question in ordered_questions:
+        metadata = question_summaries.get(str(question.id), {})
+        fields.append(build_question_field(question, metadata, used_keys))
 
     return fields
 
@@ -264,6 +431,44 @@ def clean_verified_data(
     return cleaned
 
 
+def humanize_field_label(key: str) -> str:
+    """Convert machine keys into human readable labels."""
+    if not key:
+        return "Field"
+    label = re.sub(r"[_\-]+", " ", key).strip()
+    return label.title() if label else key
+
+
+def get_field_label_map(
+    interview: InterviewForm | None,
+) -> dict[str, str]:
+    """Build a key->label map for template and API rendering."""
+    schema_fields, _ = get_verification_schema(interview)
+    label_map = {}
+    for field in schema_fields:
+        label_map[field["key"]] = field.get("label") or humanize_field_label(field["key"])
+    return label_map
+
+
+def build_display_fields(conversation: VoiceConversation) -> list[dict[str, Any]]:
+    """Materialize display-ready fields for response templates."""
+    info = conversation.extracted_info or {}
+    if not info:
+        return []
+
+    label_map = get_field_label_map(conversation.interview_form)
+    display_fields: list[dict[str, Any]] = []
+    for key, value in info.items():
+        display_fields.append(
+            {
+                "key": key,
+                "label": label_map.get(key) or humanize_field_label(key),
+                "value": value,
+            }
+        )
+    return display_fields
+
+
 # ============================================================================
 # Page Views
 # ============================================================================
@@ -319,7 +524,7 @@ def voice_page(request, interview_id: str | None = None):
 
 def view_responses(request):
     """Display all conversation responses in a list view."""
-    conversations = (
+    conversations_queryset = (
         VoiceConversation.objects.filter(extracted_info__isnull=False)
         .exclude(extracted_info={})
         .select_related("interview_form")
@@ -327,6 +532,10 @@ def view_responses(request):
             "assessments", "assessments__questions", "assessments__questions__answer"
         )
     )
+
+    conversations = list(conversations_queryset)
+    for conversation in conversations:
+        conversation.display_fields = build_display_fields(conversation)
 
     return render(request, "form_ai/responses.html", {"conversations": conversations})
 
@@ -795,6 +1004,7 @@ def view_response(request, conv_id: int):
             "created_at": conversation.created_at.strftime("%B %d, %Y - %H:%M"),
             "updated_at": conversation.updated_at.strftime("%B %d, %Y - %H:%M"),
             "user_response": conversation.extracted_info,  # Keep key name for frontend compatibility
+            "field_labels": get_field_label_map(conversation.interview_form),
             "messages": conversation.messages,
             "assessments": assessments_data,
             "interview_form": (

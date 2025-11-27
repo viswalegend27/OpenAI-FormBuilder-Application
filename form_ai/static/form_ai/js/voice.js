@@ -100,9 +100,18 @@ function renderVerificationFields() {
             wrapper.classList.add("question-field");
         }
 
-        const label = document.createElement("label");
-        label.setAttribute("for", `verify-${field.key}`);
-        label.textContent = field.label || field.key;
+        const labelEl = document.createElement("label");
+        labelEl.setAttribute("for", `verify-${field.key}`);
+        labelEl.textContent = field.label || field.key;
+
+        const helper =
+            field.helper_text && field.source === "question"
+                ? document.createElement("p")
+                : null;
+        if (helper) {
+            helper.className = "field-helper";
+            helper.textContent = field.helper_text;
+        }
 
         const input =
             field.type === "textarea"
@@ -118,7 +127,11 @@ function renderVerificationFields() {
             input.type = field.input_type || "text";
         }
 
-        wrapper.append(label, input);
+        if (helper) {
+            wrapper.append(labelEl, helper, input);
+        } else {
+            wrapper.append(labelEl, input);
+        }
         container.appendChild(wrapper);
         verificationInputMap.set(field.key, input);
     });

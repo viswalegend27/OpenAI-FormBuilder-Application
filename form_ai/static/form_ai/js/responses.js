@@ -28,6 +28,16 @@ const Utils = {
     truncate(text, length = 100) {
         if (!text) return '';
         return text.length > length ? text.substring(0, length) + '...' : text;
+    },
+
+    formatLabel(key) {
+        if (!key) return '';
+        return key
+            .toString()
+            .replace(/[_\-]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .replace(/\b\w/g, (c) => c.toUpperCase());
     }
 };
 
@@ -198,6 +208,7 @@ class ResponseManager {
         this.currentEditId = null;
         this.currentDeleteId = null;
         this.assessmentUrls = new Map();
+        this.fieldLabelCache = new Map();
         this.init();
     }
 
@@ -228,6 +239,7 @@ class ResponseManager {
     async handleView(convId) {
         try {
             const data = await this.api.viewResponse(convId);
+            this.fieldLabelCache.set(convId, data.field_labels || {});
             this.modal.setContent('viewModal', 'viewModalBody', this.buildViewContent(data));
             this.modal.show('viewModal');
         } catch (error) {
@@ -238,6 +250,7 @@ class ResponseManager {
     buildViewContent(data) {
         const userEntries = Object.entries(data.user_response || {});
         const messages = data.messages || [];
+        const fieldLabels = data.field_labels || {};
 
         return `
             <div class="view-section">
@@ -262,7 +275,7 @@ class ResponseManager {
                 ${userEntries.length > 0 ? `
                     <div class="view-grid">
                         ${userEntries.map(([key, value]) => `
-                            <div><strong>${Utils.sanitizeHTML(key)}:</strong> ${Utils.sanitizeHTML(value) || '<em class="value-empty">Not provided</em>'}</div>
+                            <div><strong>${Utils.sanitizeHTML(fieldLabels[key] || Utils.formatLabel(key))}:</strong> ${Utils.sanitizeHTML(value) || '<em class="value-empty">Not provided</em>'}</div>
                         `).join('')}
                     </div>
                 ` : '<p class="muted-text">No candidate information available</p>'}
@@ -288,23 +301,27 @@ class ResponseManager {
     async handleEdit(convId) {
         try {
             const data = await this.api.viewResponse(convId);
+            this.fieldLabelCache.set(convId, data.field_labels || {});
             this.currentEditId = convId;
             document.getElementById('edit-conv-id').value = convId;
-            document.getElementById('editFormFields').innerHTML = this.buildEditForm(data.user_response || {});
+            document.getElementById('editFormFields').innerHTML = this.buildEditForm(
+                data.user_response || {},
+                data.field_labels || {}
+            );
             this.modal.show('editModal');
         } catch (error) {
             this.toast.show(`Failed to load: ${error.message}`, 'error');
         }
     }
 
-    buildEditForm(userResponse) {
+    buildEditForm(userResponse, fieldLabels = {}) {
         const entries = Object.entries(userResponse);
         if (entries.length === 0) return '<p class="muted-text">No fields to edit</p>';
 
         return entries.map(([key, value]) => `
             <div class="form-group">
-                <label for="edit-${key}">${Utils.sanitizeHTML(key.charAt(0).toUpperCase() + key.slice(1))}:</label>
-                <input type="text" id="edit-${key}" name="${key}" value="${Utils.sanitizeHTML(value || '')}" class="form-input" placeholder="Enter ${key}">
+                <label for="edit-${key}">${Utils.sanitizeHTML(fieldLabels[key] || Utils.formatLabel(key))}:</label>
+                <input type="text" id="edit-${key}" name="${key}" value="${Utils.sanitizeHTML(value || '')}" class="form-input" placeholder="Enter ${Utils.sanitizeHTML(fieldLabels[key] || Utils.formatLabel(key))}">
             </div>
         `).join('');
     }
@@ -340,12 +357,13 @@ class ResponseManager {
     updateResponseUI(convId, userData) {
         const container = document.querySelector(`[data-conv-id="${convId}"]`);
         if (!container) return;
+        const labelMap = this.fieldLabelCache.get(convId) || {};
 
         const fieldsContainer = container.querySelector('.response-fields');
         if (fieldsContainer) {
             fieldsContainer.innerHTML = Object.entries(userData).map(([key, value]) => `
                 <div class="response-field">
-                    <span class="response-key">${Utils.sanitizeHTML(key)}:</span>
+                    <span class="response-key">${Utils.sanitizeHTML(labelMap[key] || Utils.formatLabel(key))}</span>
                     <span class="response-value ${value ? 'value-provided' : 'value-empty'}">
                         ${Utils.sanitizeHTML(value) || 'Not provided'}
                     </span>

@@ -42,15 +42,15 @@
                     {% endif %}
                 </div>
 
-                {% if conv.extracted_info %}
+                {% if conv.display_fields %}
                 <div class="response-data">
                     <strong>Candidate Information</strong>
                     <div class="response-fields">
-                        {% for key, value in conv.extracted_info.items %}
+                        {% for field in conv.display_fields %}
                         <div class="response-field">
-                            <span class="response-key">{{ key|title }}</span>
-                            <span class="response-value {% if value %}value-provided{% else %}value-empty{% endif %}">
-                                {{ value|default:"Not provided" }}
+                            <span class="response-key">{{ field.label }}</span>
+                            <span class="response-value {% if field.value %}value-provided{% else %}value-empty{% endif %}">
+                                {{ field.value|default:"Not provided" }}
                             </span>
                         </div>
                         {% endfor %}

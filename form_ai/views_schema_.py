@@ -355,6 +355,109 @@ Return JSON object with keys q1, q2, q3:
             return {f"q{i+1}": "" for i in range(len(questions))}
 
 
+QUESTION_INTENT_SCHEMA = {
+    "name": "InterviewQuestionIntents",
+    "schema": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "fields": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "required": ["id", "label", "key", "summary"],
+                    "additionalProperties": False,
+                    "properties": {
+                        "id": {"type": "string", "description": "Question ID"},
+                        "label": {
+                            "type": "string",
+                            "description": "Short human-friendly name (max 4 words)",
+                        },
+                        "key": {
+                            "type": "string",
+                            "description": "snake_case field name derived from the label",
+                        },
+                        "summary": {
+                            "type": "string",
+                            "description": "One-sentence description of what this field captures",
+                        },
+                        "topic": {
+                            "type": "string",
+                            "description": "Primary competency or topic",
+                        },
+                    },
+                },
+            }
+        },
+        "required": ["fields"],
+    },
+        "strict": True,
+}
+
+QUESTION_INTENT_SYSTEM_PROMPT = """You are a taxonomy expert who turns interview questions into concise structured field definitions.
+For each question, provide:
+- label: Title-case 1-3 words summarizing the data being collected (no verbs, no leading question words, e.g., "Skill Set", "Preferred Languages").
+- key: snake_case form of the label.
+- summary: One short sentence explaining what should be captured.
+- topic: (optional) core competency keyword (e.g., "Stack", "Communication").
+
+Rules:
+- Never repeat the original question text verbatim.
+- Strip fillers like "What is your", "Can you describe", "Tell me about".
+- Focus on the noun phrase that represents the answer.
+
+Example question:
+{"id": "123", "question": "What is your skill set?", "sequence": 1}
+
+Example output object for that question:
+{"id": "123", "label": "Skill Set", "key": "skill_set", "summary": "Primary technologies and frameworks the candidate can work with.", "topic": "Stack"}
+"""
+
+
+class QuestionIntentSummarizer:
+    """Use LLM to identify the data each interview question tries to capture."""
+
+    def __init__(self, api_key: Optional[str] = None):
+        self.client = OpenAIClient(api_key)
+
+    def summarize(self, questions: List[Dict[str, Any]]) -> Dict[str, Dict[str, str]]:
+        if not questions:
+            return {}
+
+        messages = [
+            {"role": "system", "content": QUESTION_INTENT_SYSTEM_PROMPT},
+            {"role": "user", "content": json.dumps(questions, ensure_ascii=False)},
+        ]
+
+        try:
+            data = self.client.chat_completion(
+                messages=messages,
+                temperature=0.1,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": QUESTION_INTENT_SCHEMA,
+                },
+            )
+            content = data["choices"][0]["message"]["content"]
+            parsed = json.loads(content)
+        except (KeyError, IndexError, json.JSONDecodeError, AppError) as exc:
+            logger.warning(f"[QUESTION_INTENT] Failed to summarize: {exc}")
+            return {}
+
+        results: Dict[str, Dict[str, str]] = {}
+        for item in parsed.get("fields", []):
+            qid = item.get("id")
+            if not qid:
+                continue
+            results[qid] = {
+                "label": item.get("label"),
+                "key": item.get("key"),
+                "summary": item.get("summary"),
+                "topic": item.get("topic"),
+            }
+        return results
+
+
 def get_recent_user_responses(limit: int = 10) -> List[Dict[str, Any]]:
     """Query database for recent user responses."""
     # Placeholder for actual implementation
