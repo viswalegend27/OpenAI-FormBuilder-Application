@@ -248,6 +248,15 @@ class ResponseManager {
                     <div><strong>Updated:</strong> ${data.updated_at || 'N/A'}</div>
                 </div>
             </div>
+            ${data.interview_form ? `
+                <div class="view-section">
+                    <h3>📝 Interview</h3>
+                    <div class="view-grid">
+                        <div><strong>Title:</strong> ${Utils.sanitizeHTML(data.interview_form.title || 'N/A')}</div>
+                        ${data.interview_form.role ? `<div><strong>Role:</strong> ${Utils.sanitizeHTML(data.interview_form.role)}</div>` : ''}
+                    </div>
+                </div>
+            ` : ''}
             <div class="view-section">
                 <h3>👤 Candidate Information</h3>
                 ${userEntries.length > 0 ? `

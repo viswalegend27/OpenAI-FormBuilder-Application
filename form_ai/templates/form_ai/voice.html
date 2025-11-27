@@ -11,14 +11,37 @@
 
 <body>
   <header class="header" role="banner">
-    <h1>OpenAI Realtime Form Builder</h1>
+    <div>
+      <p class="eyebrow">Interview in progress</p>
+      <h1>{{ interview.title }}</h1>
+      <p class="subtitle">
+        {% if interview.role %}{{ interview.role }} &middot; {% endif %}
+        {{ questions|length }} questions
+      </p>
+    </div>
     <nav class="header-actions" aria-label="Primary actions">
+      <a href="{% url 'interview_builder' %}" class="control-btn" aria-label="Create another interview">New Interview</a>
       <a href="{% url 'view_responses' %}" class="control-btn" aria-label="View responses">Responses</a>
     </nav>
   </header>
 
   <main class="layout">
-    <section class="workspace" aria-hidden="true"></section>
+    <section class="workspace" aria-label="Interview details">
+      <div class="details-card">
+        <h2>Question plan</h2>
+        {% if interview.summary %}
+        <p class="muted-text">{{ interview.summary }}</p>
+        {% endif %}
+        <ul class="question-list">
+          {% for question in questions %}
+          <li>
+            <span class="question-number">Q{{ question.number }}</span>
+            <span class="question-text">{{ question.text }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </section>
 
     <aside class="chat-wrapper" aria-label="Conversation panel">
       <div class="panel">
@@ -71,6 +94,15 @@
   </div>
 
   <div id="toast-message" class="toast" role="status" aria-live="polite"></div>
+  {{ questions|json_script:"interview-questions" }}
+  <script>
+    window.INTERVIEW_ID = "{{ interview_id }}";
+    window.INTERVIEW_TITLE = "{{ interview.title|escapejs }}";
+    window.INTERVIEW_ROLE = "{{ interview.role|default:''|escapejs }}";
+    window.INTERVIEW_QUESTIONS = JSON.parse(
+      document.getElementById("interview-questions").textContent || "[]"
+    );
+  </script>
   <script src="{% static 'form_ai/js/voice.js' %}"></script>
 </body>
 

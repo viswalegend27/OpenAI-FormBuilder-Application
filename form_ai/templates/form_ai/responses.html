@@ -19,7 +19,7 @@
     <header class="header">
         <h1>Interview Responses</h1>
         <nav class="header-actions">
-            <a href="{% url 'voice_page' %}" class="control-btn">
+            <a href="{% url 'interview_builder' %}" class="control-btn">
                 ← Back to Voice
             </a>
         </nav>
@@ -45,6 +45,12 @@
                         <span class="meta-label">Date:</span>
                         <span class="meta-value">{{ conv.created_at|date:"M d, Y - H:i" }}</span>
                     </div>
+                    {% if conv.interview_form %}
+                    <div class="meta-row">
+                        <span class="meta-label">Interview:</span>
+                        <span class="meta-value">{{ conv.interview_form.title }}</span>
+                    </div>
+                    {% endif %}
                 </div>
 
                 <!-- ==================== Candidate Information ==================== -->
@@ -163,7 +169,7 @@
             <div class="empty-icon">📭</div>
             <h3>No Responses Yet</h3>
             <p>Complete a voice interview to see responses here.</p>
-            <a href="{% url 'voice_page' %}" class="control-btn primary">Start Interview</a>
+            <a href="{% url 'interview_builder' %}" class="control-btn primary">Start Interview</a>
         </div>
         {% endif %}
 

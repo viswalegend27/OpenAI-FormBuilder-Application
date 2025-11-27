@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Interview Builder</title>
+    {% load static %}
+    <link rel="icon" href="{% static 'form_ai/favicon.ico' %}">
+    <link rel="stylesheet" href="{% static 'form_ai/css/interviews.css' %}">
+</head>
+
+<body>
+    <header class="header">
+        <div>
+            <p class="eyebrow">Voice Assistant</p>
+            <h1>Create Interview</h1>
+            <p class="subtitle">Define the exact questions the AI should ask before jumping into the voice experience.</p>
+        </div>
+        <nav class="header-actions">
+            <a href="{% url 'view_responses' %}" class="control-btn">View Responses</a>
+        </nav>
+    </header>
+
+    <main class="layout">
+        <section class="builder-panel">
+            <div class="panel-header">
+                <div>
+                    <h2>New Interview</h2>
+                    <p>Create a tailored set of questions for a role.</p>
+                </div>
+                <button id="add-question" class="control-btn secondary" type="button">+ Add question</button>
+            </div>
+
+            <form id="interview-form" novalidate>
+                <div class="form-grid">
+                    <label class="form-field">
+                        <span>Interview title *</span>
+                        <input type="text" name="title" placeholder="e.g., Python Intern Screening" required />
+                    </label>
+                    <label class="form-field">
+                        <span>Role / Track</span>
+                        <input type="text" name="role" placeholder="e.g., Backend Intern" />
+                    </label>
+                </div>
+
+                <label class="form-field">
+                    <span>Short summary</span>
+                    <textarea name="summary" rows="2" placeholder="Optional note for teammates"></textarea>
+                </label>
+
+                <label class="form-field">
+                    <span>Optional AI guidance</span>
+                    <textarea name="ai_prompt" rows="3"
+                        placeholder="Add any extra tone or domain instructions for the AI interviewer."></textarea>
+                </label>
+
+                <div class="questions-wrapper">
+                    <div class="questions-header">
+                        <div>
+                            <h3>Question set</h3>
+                            <p>Questions are asked sequentially during the voice interview.</p>
+                        </div>
+                        <span id="question-count" class="pill">0 questions</span>
+                    </div>
+                    <div id="question-list"></div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="control-btn primary">Create &amp; start interview</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="list-panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Existing interviews</h2>
+                    <p>{{ existing_count }} configured</p>
+                </div>
+            </div>
+
+            {% if interviews %}
+            <div class="interview-list">
+                {% for interview in interviews %}
+                <article class="interview-card">
+                    <header>
+                        <h3>{{ interview.title }}</h3>
+                        {% if interview.role %}
+                        <p class="role-label">{{ interview.role }}</p>
+                        {% endif %}
+                    </header>
+                    {% if interview.summary %}
+                    <p class="summary-text">{{ interview.summary }}</p>
+                    {% endif %}
+
+                    {% with questions=interview.questions.all %}
+                    <div class="question-preview">
+                        <p class="question-count">{{ questions|length }} questions</p>
+                        <ul>
+                            {% for question in questions|slice:":3" %}
+                            <li>{{ forloop.counter }}. {{ question.question_text }}</li>
+                            {% endfor %}
+                            {% if questions|length > 3 %}
+                            <li class="muted-text">+ {{ questions|length|add:"-3" }} more</li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                    {% endwith %}
+                    <div class="card-actions">
+                        <a href="{% url 'voice_page' interview.id %}" class="control-btn primary">Start interview</a>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <p>No interviews yet.</p>
+                <p class="muted-text">Use the form to create your first question set.</p>
+            </div>
+            {% endif %}
+        </section>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script>
+        window.MIN_QUESTIONS = 3;
+    </script>
+    <script src="{% static 'form_ai/js/interviews.js' %}"></script>
+</body>
+
+</html>

@@ -12,7 +12,10 @@
 <body>
 
     <header class="header">
-        <h1>Technical Assessment</h1>
+        <div>
+            <p class="eyebrow">Assessment Interview</p>
+            <h1>{{ interview_title|default:"Technical Assessment" }}</h1>
+        </div>
     </header>
 
     <main class="layout">
@@ -64,6 +67,7 @@
         window.USER_INFO = JSON.parse(
             document.getElementById("user-info").textContent
         );
+        window.INTERVIEW_ID = "{{ interview_id }}";
     </script>
 
     <script src="{% static 'form_ai/js/assessment.js' %}"></script>

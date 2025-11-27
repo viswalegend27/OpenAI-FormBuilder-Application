@@ -40,6 +40,20 @@ box-shadow: var(--shadow);
 flex-shrink: 0;
 }
 
+.header .eyebrow {
+text-transform: uppercase;
+letter-spacing: 0.1em;
+font-size: 0.75rem;
+opacity: 0.8;
+margin-bottom: 0.35rem;
+}
+
+.header .subtitle {
+margin-top: 0.4rem;
+color: rgba(255,255,255,0.8);
+font-size: 0.95rem;
+}
+
 .header h1 {
 font-size: 1.5rem;
 font-weight: 600;
@@ -87,14 +101,69 @@ cursor: not-allowed;
 .layout {
 flex: 1;
 display: flex;
-align-items: center;
+align-items: flex-start;
 justify-content: center;
-padding: 1rem;
+gap: 1.5rem;
+padding: 1.5rem;
 overflow: hidden;
 }
 
 .workspace {
+flex: 0 0 320px;
+max-width: 360px;
+}
+
+.details-card {
+background: var(--panel-bg);
+border-radius: var(--radius);
+box-shadow: var(--shadow);
+padding: 1.5rem;
+height: 100%;
+border: 1px solid var(--border);
+overflow-y: auto;
+}
+
+.details-card h2 {
+margin-bottom: 0.5rem;
+}
+
+.muted-text {
+color: var(--text-muted);
+margin-bottom: 1rem;
+}
+
+.question-list {
+list-style: none;
+padding: 0;
+margin: 0;
+display: flex;
+flex-direction: column;
+gap: 0.75rem;
+}
+
+.question-list li {
+display: flex;
+gap: 0.75rem;
+align-items: flex-start;
+}
+
+.question-number {
+display: inline-flex;
+align-items: center;
+justify-content: center;
+width: 28px;
+height: 28px;
+border-radius: 50%;
+background: rgba(15,130,140,0.12);
+color: var(--primary);
+font-weight: 600;
+flex-shrink: 0;
+}
+
+.question-text {
 flex: 1;
+font-size: 0.95rem;
+color: var(--text);
 }
 
 .chat-wrapper {
@@ -348,10 +417,18 @@ transform: translateX(-50%) translateY(0);
 @media (max-width: 768px) {
 .layout {
 padding: 0.5rem;
+flex-direction: column;
+align-items: stretch;
+}
+
+.workspace {
+max-width: none;
+width: 100%;
 }
 
 .chat-wrapper {
 max-height: none;
+width: 100%;
 }
 
 .message {

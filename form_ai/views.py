@@ -3,17 +3,20 @@
 import logging
 from django.core.signing import TimestampSigner, BadSignature, SignatureExpired
 from django.db import transaction
-from django.shortcuts import render
+from django.shortcuts import render, redirect
+from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST, require_http_methods
 
 from . import constants as C
-from .helper.views_helper import json_fail, json_ok
+from .helper.views_helper import AppError, json_fail, json_ok
 from .models import (
     VoiceConversation,
     TechnicalAssessment,
     AssessmentQuestion,
     CandidateAnswer,
+    InterviewForm,
+    InterviewQuestion,
 )
 from .views_schema_ import (
     AssessmentExtractor,
@@ -70,18 +73,40 @@ token_manager = AssessmentTokenManager()
 def build_session_payload(request) -> dict:
     """Build session payload based on request type and assessment mode."""
     payload = C.get_session_payload()
+    body = safe_json_parse(request.body) if request.method == "POST" else {}
 
-    if request.method == "POST":
-        body = safe_json_parse(request.body)
+    interview_id = request.GET.get("interview_id") or body.get("interview_id")
+    interview = None
+    interview_questions: list[str] | None = None
 
-        if body.get("assessment_mode"):
-            qualification = body.get("qualification", "")
-            experience = body.get("experience", "")
-            payload["instructions"] = C.get_assessment_persona(
-                qualification, experience
-            )
-            payload.pop("tools", None)
-            payload.pop("tool_choice", None)
+    if interview_id:
+        interview = (
+            InterviewForm.objects.prefetch_related("questions")
+            .filter(id=interview_id)
+            .first()
+        )
+        if interview:
+            interview_questions = interview.question_texts()
+            payload["instructions"] = C.build_interview_instructions(interview)
+
+    if body.get("assessment_mode"):
+        qualification = body.get("qualification", "")
+        experience = body.get("experience", "")
+
+        if interview_questions is None:
+            questions_from_body = body.get("questions")
+            if isinstance(questions_from_body, list):
+                interview_questions = [
+                    str(item).strip() for item in questions_from_body if str(item).strip()
+                ]
+
+        payload["instructions"] = C.get_assessment_persona(
+            qualification,
+            experience,
+            questions=interview_questions,
+        )
+        payload.pop("tools", None)
+        payload.pop("tool_choice", None)
 
     return payload
 
@@ -91,9 +116,44 @@ def build_session_payload(request) -> dict:
 # ============================================================================
 
 
-def voice_page(request):
+def interview_builder(request):
+    """Render interview creation and listing page."""
+    interviews = (
+        InterviewForm.objects.prefetch_related("questions").order_by("-updated_at")
+    )
+    return render(
+        request,
+        "form_ai/interviews.html",
+        {
+            "interviews": interviews,
+            "existing_count": interviews.count(),
+        },
+    )
+
+
+def voice_page(request, interview_id: str | None = None):
     """Render the main voice assistant interface."""
-    return render(request, "form_ai/voice.html")
+    if not interview_id:
+        return redirect("interview_builder")
+
+    interview = get_object_or_fail(
+        InterviewForm.objects.prefetch_related("questions"), id=interview_id
+    )
+
+    questions = [
+        {"number": idx, "text": text}
+        for idx, text in enumerate(interview.question_texts(), start=1)
+    ]
+
+    return render(
+        request,
+        "form_ai/voice.html",
+        {
+            "interview": interview,
+            "interview_id": str(interview.id),
+            "questions": questions,
+        },
+    )
 
 
 def view_responses(request):
@@ -101,6 +161,7 @@ def view_responses(request):
     conversations = (
         VoiceConversation.objects.filter(extracted_info__isnull=False)
         .exclude(extracted_info={})
+        .select_related("interview_form")
         .prefetch_related(
             "assessments", "assessments__questions", "assessments__questions__answer"
         )
@@ -125,9 +186,9 @@ def conduct_assessment(request, token: str):
         )
 
     assessment = get_object_or_fail(
-        TechnicalAssessment.objects.select_related("conversation").prefetch_related(
-            "questions"
-        ),
+        TechnicalAssessment.objects.select_related(
+            "conversation", "interview_form", "conversation__interview_form"
+        ).prefetch_related("questions"),
         id=assessment_id,
     )
 
@@ -136,11 +197,15 @@ def conduct_assessment(request, token: str):
         for q in assessment.questions.all()
     ]
 
+    interview = assessment.interview_form or assessment.conversation.interview_form
+
     context = {
         "assessment": assessment,
         "assessment_id": str(assessment.id),
         "user_info": assessment.conversation.extracted_info,
         "questions": questions_list,
+        "interview_id": str(interview.id) if interview else "",
+        "interview_title": interview.title if interview else "",
     }
 
     return render(request, "form_ai/assessment.html", context)
@@ -163,6 +228,62 @@ def create_realtime_session(request):
 
 
 # ============================================================================
+# Interview Management
+# ============================================================================
+
+
+@csrf_exempt
+@require_POST
+@handle_view_errors("Failed to create interview")
+@transaction.atomic
+def create_interview(request):
+    """Create interview form with its ordered questions."""
+    body = safe_json_parse(request.body)
+
+    title = validate_field(body, "title", str)
+    if not title or not title.strip():
+        raise AppError("Interview title is required", status=400)
+
+    questions = validate_field(body, "questions", list)
+    cleaned_questions = [
+        str(item).strip() for item in questions if isinstance(item, str) and item.strip()
+    ]
+
+    if not cleaned_questions:
+        raise AppError("Add at least one interview question", status=400)
+
+    interview = InterviewForm.objects.create(
+        title=title.strip(),
+        role=(body.get("role") or "").strip(),
+        summary=(body.get("summary") or "").strip(),
+        ai_prompt=(body.get("ai_prompt") or "").strip(),
+    )
+
+    InterviewQuestion.objects.bulk_create(
+        [
+            InterviewQuestion(
+                form=interview,
+                sequence_number=index,
+                question_text=text,
+            )
+            for index, text in enumerate(cleaned_questions, start=1)
+        ]
+    )
+
+    redirect_path = reverse("voice_page", args=[interview.id])
+    redirect_url = request.build_absolute_uri(redirect_path)
+
+    return json_ok(
+        {
+            "interview_id": str(interview.id),
+            "question_count": len(cleaned_questions),
+            "redirect_url": redirect_url,
+        },
+        status=201,
+    )
+
+
+# ============================================================================
 # Conversation Management
 # ============================================================================
 
@@ -175,9 +296,16 @@ def save_conversation(request):
     body = safe_json_parse(request.body)
     messages = validate_field(body, "messages", list)
     session_id = body.get("session_id")
+    interview_form = None
+
+    interview_id = body.get("interview_id")
+    if interview_id:
+        interview_form = get_object_or_fail(InterviewForm, id=interview_id)
 
     conversation = VoiceConversation.objects.create(
-        session_id=session_id, messages=messages
+        session_id=session_id,
+        messages=messages,
+        interview_form=interview_form,
     )
 
     logger.info(f"✓ Saved conversation {conversation.pk} with {len(messages)} messages")
@@ -186,6 +314,7 @@ def save_conversation(request):
         {
             "conversation_id": conversation.pk,
             "session_id": session_id,
+            "interview_id": str(interview_form.id) if interview_form else None,
             "created_at": conversation.created_at.isoformat(),
         }
     )
@@ -232,7 +361,9 @@ def analyze_conversation(request):
 @transaction.atomic
 def generate_assessment(request, conv_id: int):
     """Generate assessment with questions."""
-    conversation = get_object_or_fail(VoiceConversation, id=conv_id)
+    conversation = get_object_or_fail(
+        VoiceConversation.objects.select_related("interview_form"), id=conv_id
+    )
 
     logger.info(
         f"[GENERATE] Conversation {conv_id}, extracted_info: {conversation.extracted_info}"
@@ -245,11 +376,22 @@ def generate_assessment(request, conv_id: int):
             status=400,
         )
 
-    questions_list = C.get_questions()
+    interview_form = conversation.interview_form
+    questions_list = (
+        interview_form.question_texts() if interview_form else C.get_questions()
+    )
+
+    if not questions_list:
+        return json_fail(
+            "No interview questions available. Please configure the interview first.",
+            status=400,
+        )
 
     # Create assessment with qa_snapshot
     assessment = TechnicalAssessment.objects.create(
-        conversation=conversation, qa_snapshot=questions_list
+        conversation=conversation,
+        interview_form=interview_form,
+        qa_snapshot=questions_list,
     )
 
     # Bulk create questions
@@ -363,7 +505,7 @@ def analyze_assessment(request, assessment_id: str):
 def view_response(request, conv_id: int):
     """View full response details for a conversation."""
     conversation = get_object_or_fail(
-        VoiceConversation.objects.prefetch_related(
+        VoiceConversation.objects.select_related("interview_form").prefetch_related(
             "assessments", "assessments__questions", "assessments__questions__answer"
         ),
         id=conv_id,
@@ -417,6 +559,15 @@ def view_response(request, conv_id: int):
             "user_response": conversation.extracted_info,  # Keep key name for frontend compatibility
             "messages": conversation.messages,
             "assessments": assessments_data,
+            "interview_form": (
+                {
+                    "id": str(conversation.interview_form.id),
+                    "title": conversation.interview_form.title,
+                    "role": conversation.interview_form.role,
+                }
+                if conversation.interview_form
+                else None
+            ),
         }
     )
 

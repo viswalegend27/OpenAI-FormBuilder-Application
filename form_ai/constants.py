@@ -3,9 +3,12 @@
 import os
 import logging
 from pathlib import Path
-from typing import List
 from functools import lru_cache
+from typing import List, Sequence
+
 from django.conf import settings
+
+from .models import InterviewForm
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +45,11 @@ def _parse_numbered_list(content: str) -> List[str]:
             if text:
                 items.append(text)
     return items
+
+
+def _format_questions(questions: Sequence[str]) -> str:
+    """Format question list for prompt consumption."""
+    return "\n".join(f"{idx}. {text}" for idx, text in enumerate(questions, start=1))
 
 
 # ============================================================================
@@ -137,10 +145,14 @@ def get_session_payload() -> dict:
 # Assessment Configuration
 # ============================================================================
 
-def get_assessment_persona(qualification: str, experience: str) -> str:
+def get_assessment_persona(
+    qualification: str,
+    experience: str,
+    questions: List[str] | None = None,
+) -> str:
     """Generate assessment instructions for technical interview."""
-    questions = get_questions()
-    questions_formatted = "\n".join(f"{i}. {q}" for i, q in enumerate(questions, start=1))
+    question_list = questions or get_questions()
+    questions_formatted = _format_questions(question_list)
 
     return f"""You are Tyler, Techjays' technical interviewer.
 
@@ -153,3 +165,30 @@ Ask these questions one by one:
 
 Keep each question concise and wait for the answer before proceeding to the next.
 After all questions are answered, thank them and end the assessment."""
+
+
+def build_interview_instructions(interview: InterviewForm) -> str:
+    """Construct realtime persona instructions for a given interview form."""
+    base_persona = get_persona()
+    custom_prompt = (interview.ai_prompt or "").strip()
+    persona = f"{base_persona}\n\n{custom_prompt}".strip() if custom_prompt else base_persona
+
+    question_texts = interview.question_texts()
+    if not question_texts:
+        # Fallback to file-based questions to avoid empty prompts
+        question_texts = get_questions()
+
+    questions_formatted = _format_questions(question_texts)
+    role = interview.role or interview.title
+
+    return f"""{persona}
+
+You are interviewing a candidate for the {role} position. Follow this structure:
+- Greet the candidate and explain that you will ask {len(question_texts)} questions
+- Ask the questions one at a time, waiting for their answer before moving on
+- Confirm the captured details when you have all answers
+
+Questions to ask:
+{questions_formatted}
+
+After the final question, provide a brief summary of their answers and thank them."""

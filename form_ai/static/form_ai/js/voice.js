@@ -15,6 +15,8 @@ window._micStream = null;
 window._remoteEl = null;
 window._verifiedData = null;
 
+const INTERVIEW_ID = window.INTERVIEW_ID || "";
+
 const conversationMessages = [];
 let isNewAssistantResponse = true;
 
@@ -171,6 +173,11 @@ async function startVoice() {
     let currentAssistant = null, aiStreaming = "", sessionCreated = false;
 
     try {
+        if (!INTERVIEW_ID) {
+            toast("Select an interview before starting");
+            return;
+        }
+
         status && (status.textContent = "Requesting mic...");
         const mic = await navigator.mediaDevices.getUserMedia({
             audio: { echoCancellation: true, noiseSuppression: true }
@@ -298,7 +305,11 @@ async function startVoice() {
 
         status && (status.textContent = "Getting session...");
         // -- [API CALL]: Get ephemeral session and key from backend
-        const sessResp = await fetch("/api/session");
+        const sessionUrl = INTERVIEW_ID
+            ? `/api/session?interview_id=${encodeURIComponent(INTERVIEW_ID)}`
+            : "/api/session";
+
+        const sessResp = await fetch(sessionUrl);
         if (!sessResp.ok) throw new Error(await sessResp.text());
         const sess = await sessResp.json();
         window.currentSessionId = sess?.id || null;
@@ -348,7 +359,8 @@ async function saveConversationToServer(sessionId = null) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 session_id: sessionId,
-                messages: validMessages
+                messages: validMessages,
+                interview_id: INTERVIEW_ID
             })
         });
 
@@ -458,4 +470,11 @@ async function saveConversationToServer(sessionId = null) {
     });
 })();
 
-document.getElementById("start")?.addEventListener("click", startVoice);
+const startButton = document.getElementById("start");
+startButton?.addEventListener("click", () => {
+    if (!INTERVIEW_ID) {
+        toast("Missing interview configuration");
+        return;
+    }
+    startVoice();
+});
