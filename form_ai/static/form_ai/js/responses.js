@@ -104,7 +104,7 @@ class ToastManager {
     }
 
     show(message, type = 'info', duration = 3000) {
-        const icons = { success: '✓', error: '✕', warning: '⚠', info: 'ℹ' };
+        const icons = { success: 'OK', error: 'ERR', warning: '!', info: 'i' };
         
         const toast = document.createElement('div');
         toast.className = `toast toast-${type}`;
@@ -241,16 +241,16 @@ class ResponseManager {
 
         return `
             <div class="view-section">
-                <h3>📅 Metadata</h3>
+                <h3>Metadata</h3>
                 <div class="view-grid">
                     <div><strong>Response #:</strong> ${data.response_number || 'N/A'}</div>
                     <div><strong>Created:</strong> ${data.created_at || 'N/A'}</div>
                     <div><strong>Updated:</strong> ${data.updated_at || 'N/A'}</div>
                 </div>
             </div>
-            ${data.interview_form ? `
+                ${data.interview_form ? `
                 <div class="view-section">
-                    <h3>📝 Interview</h3>
+                    <h3>Interview</h3>
                     <div class="view-grid">
                         <div><strong>Title:</strong> ${Utils.sanitizeHTML(data.interview_form.title || 'N/A')}</div>
                         ${data.interview_form.role ? `<div><strong>Role:</strong> ${Utils.sanitizeHTML(data.interview_form.role)}</div>` : ''}
@@ -258,7 +258,7 @@ class ResponseManager {
                 </div>
             ` : ''}
             <div class="view-section">
-                <h3>👤 Candidate Information</h3>
+                <h3>Candidate Information</h3>
                 ${userEntries.length > 0 ? `
                     <div class="view-grid">
                         ${userEntries.map(([key, value]) => `
@@ -269,7 +269,7 @@ class ResponseManager {
             </div>
             ${messages.length > 0 ? `
                 <div class="view-section">
-                    <h3>💬 Conversation (${messages.length} messages)</h3>
+                    <h3>Conversation (${messages.length} messages)</h3>
                     <div class="messages-preview">
                         ${messages.slice(0, 5).map(msg => `
                             <div class="message-item">
@@ -331,6 +331,7 @@ class ResponseManager {
             this.updateResponseUI(this.currentEditId, userData);
         } catch (error) {
             this.toast.show(`Save failed: ${error.message}`, 'error');
+        } finally {
             saveBtn.disabled = false;
             saveBtn.textContent = originalText;
         }
@@ -377,6 +378,7 @@ class ResponseManager {
             this.removeResponseFromUI(this.currentDeleteId);
         } catch (error) {
             this.toast.show(`Delete failed: ${error.message}`, 'error');
+        } finally {
             confirmBtn.disabled = false;
             confirmBtn.textContent = originalText;
         }
@@ -403,10 +405,10 @@ class ResponseManager {
         if (layout) {
             layout.innerHTML = `
                 <div class="empty-state">
-                    <div class="empty-icon">📭</div>
+                    <div class="empty-icon"></div>
                     <h3>No Responses Yet</h3>
                     <p>Complete a voice interview to see responses here.</p>
-                    <a href="/voice/" class="control-btn primary">Start Interview</a>
+                    <a href="/" class="control-btn primary">Start Interview</a>
                 </div>
             `;
         }
@@ -429,7 +431,7 @@ class ResponseManager {
 
             urlInput.value = data.assessment_url;
             urlDisplay.style.display = 'flex';
-            btn.textContent = '✓ Generated';
+            btn.textContent = 'Generated';
 
             if (redirectBtn) {
                 redirectBtn.style.display = 'inline-flex';
@@ -485,7 +487,7 @@ class ResponseManager {
                 document.execCommand('copy');
             }
 
-            btn.textContent = '✓ Copied!';
+            btn.textContent = 'Copied!';
             btn.classList.add('success');
             this.toast.show('Copied to clipboard', 'success');
 
@@ -528,7 +530,7 @@ class App {
     }
 
     start() {
-        console.log('🚀 Responses Manager Ready');
+        console.log('[Responses] Manager ready');
         
         new ResponseManager(this.api, this.modal, this.toast);
 
@@ -537,7 +539,7 @@ class App {
             this.toast.show('An unexpected error occurred', 'error');
         });
 
-        console.log('✅ Application Loaded');
+        console.log('[Responses] Application loaded');
     }
 }
 

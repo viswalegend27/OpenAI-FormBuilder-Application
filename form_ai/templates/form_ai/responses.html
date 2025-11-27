@@ -20,7 +20,7 @@
         <h1>Interview Responses</h1>
         <nav class="header-actions">
             <a href="{% url 'interview_builder' %}" class="control-btn">
-                ← Back to Voice
+                Back to Builder
             </a>
         </nav>
     </header>
@@ -76,29 +76,29 @@
                     <!-- Primary Actions Row -->
                     <div class="actions-row">
                         <button class="control-btn view-btn" data-conv-id="{{ conv.id }}" title="View full details">
-                            👁️ View
+                            View
                         </button>
                         <button class="control-btn edit-btn" data-conv-id="{{ conv.id }}"
                             title="Edit candidate information">
-                            ✏️ Edit
+                            Edit
                         </button>
                         <button class="control-btn delete-btn" data-conv-id="{{ conv.id }}"
                             title="Delete this response">
-                            🗑️ Delete
+                            Delete
                         </button>
                     </div>
 
                     <!-- Assessment Actions -->
                     <div class="actions-row">
                         <button class="control-btn primary generate-assessment-btn" data-conv-id="{{ conv.id }}">
-                            📋 Generate Assessment URL
+                            Generate Assessment URL
                         </button>
                         <button class="control-btn redirect-btn" data-conv-id="{{ conv.id }}" style="display:none;">
-                            🚀 Start Assessment
+                            Start Assessment
                         </button>
                         {% if conv.assessments.exists %}
                         <button class="control-btn view-assessments-btn" data-conv-id="{{ conv.id }}">
-                            📊 View Assessments ({{ conv.assessments.count }})
+                            View Assessments ({{ conv.assessments.count }})
                         </button>
                         {% endif %}
                     </div>
@@ -106,7 +106,7 @@
                     <!-- Assessment URL Display -->
                     <div class="assessment-url-display" id="url-display-{{ conv.id }}" style="display:none;">
                         <input type="text" readonly class="url-input" aria-label="Assessment URL" />
-                        <button class="control-btn copy-btn">📋 Copy</button>
+                        <button class="control-btn copy-btn">Copy</button>
                     </div>
 
                     <!-- Assessments List -->
@@ -123,7 +123,7 @@
                                     <strong>Status:</strong>
                                     <span
                                         class="status-badge {% if assessment.is_completed %}status-completed{% else %}status-pending{% endif %}">
-                                        {{ assessment.is_completed|yesno:"✓ Completed,⏳ Pending" }}
+                                        {{ assessment.is_completed|yesno:"Completed,Pending" }}
                                     </span>
                                 </div>
                             </div>
@@ -140,11 +140,11 @@
                                     <div class="answer-line">
                                         {% with answer=question.answer %}
                                         {% if answer and answer.response_text and answer.response_text != "NIL" %}
-                                        <span class="value-provided">→ {{ answer.response_text }}</span>
+                                        <span class="value-provided">{{ answer.response_text }}</span>
                                         {% elif answer %}
-                                        <span class="value-empty">→ No answer provided</span>
+                                        <span class="value-empty">No answer provided</span>
                                         {% else %}
-                                        <span class="value-empty">→ Not answered yet</span>
+                                        <span class="value-empty">Not answered yet</span>
                                         {% endif %}
                                         {% endwith %}
                                     </div>
@@ -166,7 +166,7 @@
         {% else %}
         <!-- Empty State -->
         <div class="empty-state">
-            <div class="empty-icon">📭</div>
+            <div class="empty-icon"></div>
             <h3>No Responses Yet</h3>
             <p>Complete a voice interview to see responses here.</p>
             <a href="{% url 'interview_builder' %}" class="control-btn primary">Start Interview</a>
@@ -224,7 +224,7 @@
                 <button class="modal-close" aria-label="Close">&times;</button>
             </div>
             <div class="modal-body">
-                <p class="warning-text">⚠️ Are you sure you want to delete this response?</p>
+                <p class="warning-text">Are you sure you want to delete this response?</p>
                 <p class="muted-text">This action cannot be undone. All associated assessments will also be deleted.</p>
                 <input type="hidden" id="delete-conv-id">
             </div>
@@ -246,7 +246,7 @@
             </div>
             <div class="modal-body">
                 <div class="redirect-content">
-                    <div class="redirect-icon">🚀</div>
+                    <div class="redirect-icon"></div>
                     <p class="redirect-message">You are about to start the technical assessment.</p>
                     <p class="muted-text">Make sure your microphone is enabled.</p>
                 </div>
@@ -254,7 +254,7 @@
             </div>
             <div class="modal-footer">
                 <button class="control-btn modal-close">Cancel</button>
-                <button class="control-btn primary" id="confirmRedirectBtn">Start Assessment →</button>
+                <button class="control-btn primary" id="confirmRedirectBtn">Start Assessment</button>
             </div>
         </div>
     </div>

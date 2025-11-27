@@ -4,7 +4,7 @@ import os
 import logging
 from pathlib import Path
 from functools import lru_cache
-from typing import List, Sequence
+from typing import List, Sequence, Optional
 
 from django.conf import settings
 
@@ -88,6 +88,65 @@ def clear_cache():
     """Clear cached content."""
     get_persona.cache_clear()
     get_questions.cache_clear()
+
+
+# ========================================================================
+# Voice Interview Defaults
+# ========================================================================
+
+DEFAULT_VOICE_QUESTIONS: List[str] = [
+    "What is your full name?",
+    "What is your highest qualification? (e.g., B.E. Computer Science 2025)",
+    "How many years of relevant experience do you have?",
+]
+
+
+def get_default_voice_questions() -> List[str]:
+    """Return a copy of the fallback voice interview questions."""
+    return list(DEFAULT_VOICE_QUESTIONS)
+
+
+def _compose_voice_instructions(
+    question_texts: Sequence[str],
+    role_label: str,
+    custom_prompt: str = "",
+    context_note: Optional[str] = None,
+) -> str:
+    """Compose realtime instructions shared by custom and fallback flows."""
+    question_list = [q.strip() for q in question_texts if q and q.strip()]
+    if not question_list:
+        raise ValueError("No valid interview questions were supplied")
+
+    persona = get_persona()
+    prompt = (custom_prompt or "").strip()
+    if prompt:
+        persona = f"{persona}\n\nAdditional guidance:\n{prompt}"
+
+    question_count = len(question_list)
+    question_label = "questions" if question_count != 1 else "question"
+    questions_formatted = _format_questions(question_list)
+    context_section = f"{context_note}\n\n" if context_note else ""
+
+    return f"""{persona}
+
+{context_section}You are interviewing a candidate for the {role_label} position. Follow this structure:
+- Greet the candidate and explain that you will ask {question_count} {question_label}
+- Ask the questions one at a time, waiting for their answer before moving on
+- Briefly confirm each answer so the candidate knows you captured it
+
+Questions to ask:
+{questions_formatted}
+
+After the final question, provide a concise summary of their answers, offer verification, and thank them."""
+
+
+def build_default_voice_instructions() -> str:
+    """Return instructions for the fallback interview flow."""
+    return _compose_voice_instructions(
+        get_default_voice_questions(),
+        "internship screening",
+        context_note="Use this default plan only when no custom interview form ID is provided.",
+    )
 
 
 # ============================================================================
@@ -174,27 +233,15 @@ After all questions are answered, thank them and end the assessment."""
 
 def build_interview_instructions(interview: InterviewForm) -> str:
     """Construct realtime persona instructions for a given interview form."""
-    base_persona = get_persona()
-    custom_prompt = (interview.ai_prompt or "").strip()
-    persona = f"{base_persona}\n\n{custom_prompt}".strip() if custom_prompt else base_persona
-
     question_texts = interview.question_texts()
     if not question_texts:
         raise ValueError(
             f"Interview form '{interview.id}' does not have any questions configured"
         )
 
-    questions_formatted = _format_questions(question_texts)
     role = interview.role or interview.title
-
-    return f"""{persona}
-
-You are interviewing a candidate for the {role} position. Follow this structure:
-- Greet the candidate and explain that you will ask {len(question_texts)} questions
-- Ask the questions one at a time, waiting for their answer before moving on
-- Confirm the captured details when you have all answers
-
-Questions to ask:
-{questions_formatted}
-
-After the final question, provide a brief summary of their answers and thank them."""
+    return _compose_voice_instructions(
+        question_texts,
+        role,
+        custom_prompt=interview.ai_prompt or "",
+    )

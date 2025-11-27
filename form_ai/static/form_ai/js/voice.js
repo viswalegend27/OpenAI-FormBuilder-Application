@@ -133,20 +133,50 @@ function hideVerificationPopup() {
     $("verification-popup").style.display = "none";
 }
 
+const VERIFIED_FIELDS = ["name", "qualification", "experience"];
+
+function normalizeVerifiedData(data) {
+    if (!data) return null;
+    const cleaned = {};
+    VERIFIED_FIELDS.forEach((field) => {
+        const value = (data[field] || "").toString().trim();
+        if (value) cleaned[field] = value;
+    });
+    return Object.keys(cleaned).length ? cleaned : null;
+}
+
+function getVerifiedDataPayload() {
+    return normalizeVerifiedData(window._verifiedData);
+}
+
+function buildVerificationSummary(cleaned) {
+    if (!cleaned) return "";
+    const lines = ["Candidate confirmed their details:"];
+    VERIFIED_FIELDS.forEach((field) => {
+        if (cleaned[field]) {
+            const label = field.charAt(0).toUpperCase() + field.slice(1);
+            lines.push(`- ${label}: ${cleaned[field]}`);
+        }
+    });
+    return lines.join("\n");
+}
+
 // Setup verification popup handlers
 (() => {
     $("verify-confirm")?.addEventListener("click", () => {
         window._verifiedData = {
-            name: $("verify-name").value,
-            qualification: $("verify-qualification").value,
-            experience: $("verify-experience").value
+            name: $("verify-name").value.trim(),
+            qualification: $("verify-qualification").value.trim(),
+            experience: $("verify-experience").value.trim()
         };
         hideVerificationPopup();
-        toast("Information verified ✓");
-        
-        // Send confirmation to AI
-        if (window._dc && window._dc.readyState === "open") {
-            // -- [API CALL]: Send verified user info to AI over WebRTC DataChannel
+        toast("Information verified");
+
+        const cleaned = getVerifiedDataPayload();
+        if (cleaned && window._dc && window._dc.readyState === "open") {
+            const summaryText = buildVerificationSummary(cleaned);
+            pushMessage("user", summaryText);
+
             window._dc.send(JSON.stringify({
                 type: "conversation.item.create",
                 item: {
@@ -154,11 +184,10 @@ function hideVerificationPopup() {
                     role: "user",
                     content: [{
                         type: "input_text",
-                        text: "Information verified and confirmed"
+                        text: summaryText
                     }]
                 }
             }));
-            // -- [API CALL]: Request AI to generate a response
             window._dc.send(JSON.stringify({ type: "response.create" }));
         }
     });
@@ -292,7 +321,7 @@ async function startVoice() {
                 remote.muted = false;
                 window._remoteEl = remote;
                 remote.play().catch(() => {
-                    status && (status.textContent = "Connected — click to allow audio");
+                    status && (status.textContent = "Connected - click to allow audio");
                     document.addEventListener("click", () => remote.play(), { once: true });
                 });
             }
@@ -355,21 +384,27 @@ async function saveConversationToServer(sessionId = null) {
     }
 
     try {
+        const verifiedData = getVerifiedDataPayload();
         voiceLog("Persisting conversation", {
             sessionId,
             messages: validMessages.length,
-            interviewId: INTERVIEW_ID
+            interviewId: INTERVIEW_ID,
+            hasVerifiedData: Boolean(verifiedData)
         });
         $("status") && ($("status").textContent = "Saving conversation...");
+        const savePayload = {
+            session_id: sessionId,
+            messages: validMessages,
+            interview_id: INTERVIEW_ID
+        };
+        if (verifiedData) {
+            savePayload.verified_data = verifiedData;
+        }
         // -- [API CALL]: Save conversation messages to backend
         const saveResp = await fetch("/api/conversation/", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                session_id: sessionId,
-                messages: validMessages,
-                interview_id: INTERVIEW_ID
-            })
+            body: JSON.stringify(savePayload)
         });
 
         if (!saveResp.ok) {
@@ -382,13 +417,15 @@ async function saveConversationToServer(sessionId = null) {
         console.log("Conversation saved:", saveData);
 
         $("status") && ($("status").textContent = "Analyzing responses...");
+        const analyzePayload = { session_id: sessionId };
+        if (verifiedData) {
+            analyzePayload.verified_data = verifiedData;
+        }
         // -- [API CALL]: Request backend to analyze saved conversation
         const analyzeResp = await fetch("/api/conversation/analyze", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                session_id: sessionId
-            })
+            body: JSON.stringify(analyzePayload)
         });
 
         if (!analyzeResp.ok) {
@@ -401,7 +438,7 @@ async function saveConversationToServer(sessionId = null) {
         console.log("Analysis completed:", analyzeData);
 
         window._conversationSaved = true;
-        toast("Conversation saved & analyzed ✓");
+        toast("Conversation saved and analyzed");
         return { ...saveData, analysis: analyzeData };
 
     } catch (err) {

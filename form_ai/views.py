@@ -1,6 +1,7 @@
 # views.py
 
 import logging
+from typing import Any, Dict
 from django.core.signing import TimestampSigner, BadSignature, SignatureExpired
 from django.db import transaction
 from django.shortcuts import render, redirect
@@ -73,6 +74,7 @@ token_manager = AssessmentTokenManager()
 def build_session_payload(request) -> dict:
     """Build session payload based on request type and assessment mode."""
     payload = C.get_session_payload()
+    payload["instructions"] = C.build_default_voice_instructions()
     body = safe_json_parse(request.body) if request.method == "POST" else {}
 
     interview_id = request.GET.get("interview_id") or body.get("interview_id")
@@ -130,6 +132,23 @@ def build_session_payload(request) -> dict:
         payload.pop("tool_choice", None)
 
     return payload
+
+
+def clean_verified_data(data: Dict[str, Any] | None) -> Dict[str, str]:
+    """Normalize user-provided verification overrides."""
+    if not isinstance(data, dict):
+        return {}
+
+    cleaned: Dict[str, str] = {}
+    for field in DEFAULT_EXTRACTION_KEYS:
+        value = data.get(field)
+        if value is None:
+            continue
+
+        text = str(value).strip()
+        if text:
+            cleaned[field] = text
+    return cleaned
 
 
 # ============================================================================
@@ -379,7 +398,11 @@ def save_conversation(request):
         interview_form=interview_form,
     )
 
-    logger.info(f"✓ Saved conversation {conversation.pk} with {len(messages)} messages")
+    logger.info(
+        "[CONVERSATION] Saved conversation %s with %d messages",
+        conversation.pk,
+        len(messages),
+    )
 
     return json_ok(
         {
@@ -391,6 +414,7 @@ def save_conversation(request):
     )
 
 
+
 @csrf_exempt
 @require_POST
 @handle_view_errors("Analysis failed")
@@ -400,17 +424,29 @@ def analyze_conversation(request):
     session_id = validate_field(body, "session_id", str)
 
     conversation = get_object_or_fail(VoiceConversation, session_id=session_id)
+    overrides = clean_verified_data(body.get("verified_data"))
 
     client = OpenAIClient()
     extracted_data = client.extract_structured_data(
         conversation.messages, DEFAULT_EXTRACTION_KEYS
     )
 
+    if overrides:
+        extracted_data.update(overrides)
+        logger.info(
+            "[CONVERSATION] Applied verified overrides for session %s: %s",
+            session_id,
+            overrides,
+        )
+
     conversation.extracted_info = extracted_data
     conversation.save(update_fields=["extracted_info", "updated_at"])
 
-    logger.info(f"✓ Analyzed conversation {conversation.pk}: {extracted_data}")
-    logger.info(f"✓ Conversation {conversation.pk} now has extracted_info saved")
+    logger.info(
+        "[CONVERSATION] Analysis complete for %s (%s)",
+        conversation.pk,
+        ", ".join(extracted_data.keys()),
+    )
 
     return json_ok(
         {
@@ -419,6 +455,7 @@ def analyze_conversation(request):
             "user_response": extracted_data,
         }
     )
+
 
 
 # ============================================================================
@@ -488,9 +525,7 @@ def generate_assessment(request, conv_id: int):
     encrypted_token = token_manager.encrypt(assessment.id)
     assessment_url = request.build_absolute_uri(f"/assessment/{encrypted_token}/")
 
-    logger.info(
-        f"✓ Generated assessment {assessment.id} with {len(questions_list)} questions"
-    )
+    logger.info("[GENERATE] Created assessment %s with %d questions", assessment.id, len(questions_list))
 
     return json_ok(
         {
@@ -515,7 +550,7 @@ def save_assessment(request, assessment_id: str):
     assessment.transcript = messages
     assessment.save(update_fields=["transcript", "updated_at"])
 
-    logger.info(f"✓ Assessment {assessment_id}: Saved {len(messages)} messages")
+    logger.info("[ASSESSMENT] Saved transcript for %s (%d messages)", assessment_id, len(messages))
 
     return json_ok(
         {"assessment_id": str(assessment.id), "message_count": len(messages)}
@@ -561,7 +596,7 @@ def analyze_assessment(request, assessment_id: str):
     assessment.is_completed = True
     assessment.save(update_fields=["is_completed", "updated_at"])
 
-    logger.info(f"[ANALYZE] ✓ Completed assessment {assessment_id}")
+    logger.info("[ANALYZE] Completed assessment %s", assessment_id)
 
     return json_ok(
         {
@@ -664,7 +699,7 @@ def edit_response(request, conv_id: int):
     conversation.extracted_info = user_response
     conversation.save(update_fields=["extracted_info", "updated_at"])
 
-    logger.info(f"✓ Updated conversation {conv_id}")
+    logger.info("[RESPONSES] Updated conversation %s", conv_id)
 
     return json_ok(
         {
@@ -684,6 +719,6 @@ def delete_response(request, conv_id: int):
     conversation = get_object_or_fail(VoiceConversation, id=conv_id)
     conversation.delete()
 
-    logger.info(f"✓ Deleted conversation {conv_id}")
+    logger.info("[RESPONSES] Deleted conversation %s", conv_id)
 
     return json_ok({"message": "Response deleted successfully"})
