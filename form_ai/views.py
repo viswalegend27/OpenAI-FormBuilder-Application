@@ -13,7 +13,7 @@ from .models import (
     VoiceConversation,
     TechnicalAssessment,
     AssessmentQuestion,
-    CandidateAnswer
+    CandidateAnswer,
 )
 from .views_schema_ import (
     AssessmentExtractor,
@@ -39,6 +39,7 @@ ASSESSMENT_TOKEN_MAX_AGE = 60 * 60 * 24 * 7  # 7 days
 # Token Management
 # ============================================================================
 
+
 class AssessmentTokenManager:
     """Handles secure token generation and validation."""
 
@@ -48,7 +49,9 @@ class AssessmentTokenManager:
     def encrypt(self, assessment_id: str) -> str:
         return self.signer.sign(str(assessment_id))
 
-    def decrypt(self, token: str, max_age: int = ASSESSMENT_TOKEN_MAX_AGE) -> str | None:
+    def decrypt(
+        self, token: str, max_age: int = ASSESSMENT_TOKEN_MAX_AGE
+    ) -> str | None:
         try:
             return self.signer.unsign(token, max_age=max_age)
         except (BadSignature, SignatureExpired) as e:
@@ -63,6 +66,7 @@ token_manager = AssessmentTokenManager()
 # Helper Functions
 # ============================================================================
 
+
 def build_session_payload(request) -> dict:
     """Build session payload based on request type and assessment mode."""
     payload = C.get_session_payload()
@@ -73,7 +77,9 @@ def build_session_payload(request) -> dict:
         if body.get("assessment_mode"):
             qualification = body.get("qualification", "")
             experience = body.get("experience", "")
-            payload["instructions"] = C.get_assessment_persona(qualification, experience)
+            payload["instructions"] = C.get_assessment_persona(
+                qualification, experience
+            )
             payload.pop("tools", None)
             payload.pop("tool_choice", None)
 
@@ -84,6 +90,7 @@ def build_session_payload(request) -> dict:
 # Page Views
 # ============================================================================
 
+
 def voice_page(request):
     """Render the main voice assistant interface."""
     return render(request, "form_ai/voice.html")
@@ -91,19 +98,15 @@ def voice_page(request):
 
 def view_responses(request):
     """Display all conversation responses in a list view."""
-    conversations = VoiceConversation.objects.filter(
-        extracted_info__isnull=False
-    ).exclude(
-        extracted_info={}
-    ).prefetch_related(
-        'assessments',
-        'assessments__questions',
-        'assessments__questions__answer'
+    conversations = (
+        VoiceConversation.objects.filter(extracted_info__isnull=False)
+        .exclude(extracted_info={})
+        .prefetch_related(
+            "assessments", "assessments__questions", "assessments__questions__answer"
+        )
     )
 
-    return render(request, "form_ai/responses.html", {
-        "conversations": conversations
-    })
+    return render(request, "form_ai/responses.html", {"conversations": conversations})
 
 
 def conduct_assessment(request, token: str):
@@ -111,26 +114,33 @@ def conduct_assessment(request, token: str):
     assessment_id = token_manager.decrypt(token)
 
     if not assessment_id:
-        return render(request, "form_ai/error.html", {
-            "error": "Invalid or expired assessment link",
-            "message": "This assessment link is no longer valid."
-        }, status=400)
+        return render(
+            request,
+            "form_ai/error.html",
+            {
+                "error": "Invalid or expired assessment link",
+                "message": "This assessment link is no longer valid.",
+            },
+            status=400,
+        )
 
     assessment = get_object_or_fail(
-        TechnicalAssessment.objects.select_related('conversation').prefetch_related('questions'),
-        id=assessment_id
+        TechnicalAssessment.objects.select_related("conversation").prefetch_related(
+            "questions"
+        ),
+        id=assessment_id,
     )
 
     questions_list = [
-        {'number': q.sequence_number, 'text': q.question_text}
+        {"number": q.sequence_number, "text": q.question_text}
         for q in assessment.questions.all()
     ]
 
     context = {
-        'assessment': assessment,
-        'assessment_id': str(assessment.id),
-        'user_info': assessment.conversation.extracted_info,
-        'questions': questions_list,
+        "assessment": assessment,
+        "assessment_id": str(assessment.id),
+        "user_info": assessment.conversation.extracted_info,
+        "questions": questions_list,
     }
 
     return render(request, "form_ai/assessment.html", context)
@@ -139,6 +149,7 @@ def conduct_assessment(request, token: str):
 # ============================================================================
 # Realtime Session
 # ============================================================================
+
 
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
@@ -155,6 +166,7 @@ def create_realtime_session(request):
 # Conversation Management
 # ============================================================================
 
+
 @csrf_exempt
 @require_POST
 @handle_view_errors("Failed to save conversation")
@@ -165,16 +177,18 @@ def save_conversation(request):
     session_id = body.get("session_id")
 
     conversation = VoiceConversation.objects.create(
-        session_id=session_id,
-        messages=messages
+        session_id=session_id, messages=messages
     )
 
-    logger.info(f"✓ Saved conversation {conversation.pk}")
+    logger.info(f"✓ Saved conversation {conversation.pk} with {len(messages)} messages")
 
-    return json_ok({
-        "conversation_id": conversation.pk,
-        "created_at": conversation.created_at.isoformat()
-    })
+    return json_ok(
+        {
+            "conversation_id": conversation.pk,
+            "session_id": session_id,
+            "created_at": conversation.created_at.isoformat(),
+        }
+    )
 
 
 @csrf_exempt
@@ -189,24 +203,28 @@ def analyze_conversation(request):
 
     client = OpenAIClient()
     extracted_data = client.extract_structured_data(
-        conversation.messages,
-        DEFAULT_EXTRACTION_KEYS
+        conversation.messages, DEFAULT_EXTRACTION_KEYS
     )
 
     conversation.extracted_info = extracted_data
     conversation.save(update_fields=["extracted_info", "updated_at"])
 
     logger.info(f"✓ Analyzed conversation {conversation.pk}: {extracted_data}")
+    logger.info(f"✓ Conversation {conversation.pk} now has extracted_info saved")
 
-    return json_ok({
-        "session_id": session_id,
-        "user_response": extracted_data  # Keep as user_response for frontend compatibility
-    })
+    return json_ok(
+        {
+            "session_id": session_id,
+            "conversation_id": conversation.pk,
+            "user_response": extracted_data,
+        }
+    )
 
 
 # ============================================================================
 # Assessment Management
 # ============================================================================
+
 
 @csrf_exempt
 @require_POST
@@ -216,37 +234,51 @@ def generate_assessment(request, conv_id: int):
     """Generate assessment with questions."""
     conversation = get_object_or_fail(VoiceConversation, id=conv_id)
 
+    logger.info(
+        f"[GENERATE] Conversation {conv_id}, extracted_info: {conversation.extracted_info}"
+    )
+
     if not conversation.extracted_info:
-        return json_fail("No user data available", status=400)
+        logger.error(f"[GENERATE] No extracted_info for conversation {conv_id}")
+        return json_fail(
+            "No user data available. Please complete the voice interview first.",
+            status=400,
+        )
 
     questions_list = C.get_questions()
 
-    # Create assessment
-    assessment = TechnicalAssessment.objects.create(conversation=conversation)
+    # Create assessment with qa_snapshot
+    assessment = TechnicalAssessment.objects.create(
+        conversation=conversation, qa_snapshot=questions_list
+    )
 
     # Bulk create questions
-    AssessmentQuestion.objects.bulk_create([
-        AssessmentQuestion(
-            assessment=assessment,
-            sequence_number=idx,
-            question_text=text
-        )
-        for idx, text in enumerate(questions_list, start=1)
-    ])
+    AssessmentQuestion.objects.bulk_create(
+        [
+            AssessmentQuestion(
+                assessment=assessment, sequence_number=idx, question_text=text
+            )
+            for idx, text in enumerate(questions_list, start=1)
+        ]
+    )
 
     # Generate secure URL
     encrypted_token = token_manager.encrypt(assessment.id)
     assessment_url = request.build_absolute_uri(f"/assessment/{encrypted_token}/")
 
-    logger.info(f"✓ Generated assessment {assessment.id} with {len(questions_list)} questions")
+    logger.info(
+        f"✓ Generated assessment {assessment.id} with {len(questions_list)} questions"
+    )
 
-    return json_ok({
-        "assessment_id": str(assessment.id),
-        "assessment_url": assessment_url,
-        "token": encrypted_token,
-        "question_count": len(questions_list),
-        "redirect": True
-    })
+    return json_ok(
+        {
+            "assessment_id": str(assessment.id),
+            "assessment_url": assessment_url,
+            "token": encrypted_token,
+            "question_count": len(questions_list),
+            "redirect": True,
+        }
+    )
 
 
 @csrf_exempt
@@ -263,10 +295,9 @@ def save_assessment(request, assessment_id: str):
 
     logger.info(f"✓ Assessment {assessment_id}: Saved {len(messages)} messages")
 
-    return json_ok({
-        "assessment_id": str(assessment.id),
-        "message_count": len(messages)
-    })
+    return json_ok(
+        {"assessment_id": str(assessment.id), "message_count": len(messages)}
+    )
 
 
 @csrf_exempt
@@ -276,14 +307,13 @@ def save_assessment(request, assessment_id: str):
 def analyze_assessment(request, assessment_id: str):
     """Analyze assessment responses and save answers."""
     assessment = get_object_or_fail(
-        TechnicalAssessment.objects.prefetch_related('questions'),
-        id=assessment_id
+        TechnicalAssessment.objects.prefetch_related("questions"), id=assessment_id
     )
     body = safe_json_parse(request.body)
 
     logger.info(f"[ANALYZE] Assessment {assessment_id}")
 
-    qa_mapping = body.get('qa_mapping')
+    qa_mapping = body.get("qa_mapping")
 
     if qa_mapping and isinstance(qa_mapping, dict):
         logger.info("[ANALYZE] Using direct Q&A mapping")
@@ -301,7 +331,7 @@ def analyze_assessment(request, assessment_id: str):
         answer_text = answers_dict.get(answer_key, "")
 
         CandidateAnswer.create_or_update(question, answer_text)
-        saved_answers[answer_key] = answer_text if answer_text else 'NIL'
+        saved_answers[answer_key] = answer_text if answer_text else "NIL"
 
         logger.info(f"[ANALYZE] Saved answer for Q{question.sequence_number}")
 
@@ -311,18 +341,21 @@ def analyze_assessment(request, assessment_id: str):
 
     logger.info(f"[ANALYZE] ✓ Completed assessment {assessment_id}")
 
-    return json_ok({
-        "assessment_id": str(assessment_id),
-        "answers": saved_answers,
-        "completed": True,
-        "total_questions": assessment.total_questions,
-        "answered_questions": assessment.answered_count
-    })
+    return json_ok(
+        {
+            "assessment_id": str(assessment_id),
+            "answers": saved_answers,
+            "completed": True,
+            "total_questions": assessment.total_questions,
+            "answered_questions": assessment.answered_count,
+        }
+    )
 
 
 # ============================================================================
 # Response Management
 # ============================================================================
+
 
 @csrf_exempt
 @require_http_methods(["GET"])
@@ -331,11 +364,9 @@ def view_response(request, conv_id: int):
     """View full response details for a conversation."""
     conversation = get_object_or_fail(
         VoiceConversation.objects.prefetch_related(
-            'assessments',
-            'assessments__questions',
-            'assessments__questions__answer'
+            "assessments", "assessments__questions", "assessments__questions__answer"
         ),
-        id=conv_id
+        id=conv_id,
     )
 
     response_number = VoiceConversation.objects.filter(
@@ -346,38 +377,48 @@ def view_response(request, conv_id: int):
     for assessment in conversation.assessments.all():
         qa_pairs = []
         for question in assessment.questions.all():
-            answer_text = 'NIL'
+            answer_text = "NIL"
             answered_at = None
-            
+
             try:
-                if hasattr(question, 'answer') and question.answer:
-                    answer_text = question.answer.response_text or 'NIL'
-                    answered_at = question.answer.created_at.isoformat() if question.answer.created_at else None
+                if hasattr(question, "answer") and question.answer:
+                    answer_text = question.answer.response_text or "NIL"
+                    answered_at = (
+                        question.answer.created_at.isoformat()
+                        if question.answer.created_at
+                        else None
+                    )
             except CandidateAnswer.DoesNotExist:
                 pass
 
-            qa_pairs.append({
-                'number': question.sequence_number,
-                'question': question.question_text,
-                'answer': answer_text,
-                'answered_at': answered_at
-            })
+            qa_pairs.append(
+                {
+                    "number": question.sequence_number,
+                    "question": question.question_text,
+                    "answer": answer_text,
+                    "answered_at": answered_at,
+                }
+            )
 
-        assessments_data.append({
-            'id': str(assessment.id),
-            'completed': assessment.is_completed,
-            'qa_pairs': qa_pairs,
-            'completion_percentage': assessment.completion_percentage
-        })
+        assessments_data.append(
+            {
+                "id": str(assessment.id),
+                "completed": assessment.is_completed,
+                "qa_pairs": qa_pairs,
+                "completion_percentage": assessment.completion_percentage,
+            }
+        )
 
-    return json_ok({
-        "response_number": response_number,
-        "created_at": conversation.created_at.strftime("%B %d, %Y - %H:%M"),
-        "updated_at": conversation.updated_at.strftime("%B %d, %Y - %H:%M"),
-        "user_response": conversation.extracted_info,  # Keep key name for frontend compatibility
-        "messages": conversation.messages,
-        "assessments": assessments_data
-    })
+    return json_ok(
+        {
+            "response_number": response_number,
+            "created_at": conversation.created_at.strftime("%B %d, %Y - %H:%M"),
+            "updated_at": conversation.updated_at.strftime("%B %d, %Y - %H:%M"),
+            "user_response": conversation.extracted_info,  # Keep key name for frontend compatibility
+            "messages": conversation.messages,
+            "assessments": assessments_data,
+        }
+    )
 
 
 @csrf_exempt
@@ -394,11 +435,13 @@ def edit_response(request, conv_id: int):
 
     logger.info(f"✓ Updated conversation {conv_id}")
 
-    return json_ok({
-        "conversation_id": conversation.pk,
-        "user_response": conversation.extracted_info,
-        "updated_at": conversation.updated_at.isoformat()
-    })
+    return json_ok(
+        {
+            "conversation_id": conversation.pk,
+            "user_response": conversation.extracted_info,
+            "updated_at": conversation.updated_at.isoformat(),
+        }
+    )
 
 
 @csrf_exempt
@@ -412,6 +455,4 @@ def delete_response(request, conv_id: int):
 
     logger.info(f"✓ Deleted conversation {conv_id}")
 
-    return json_ok({
-        "message": "Response deleted successfully"
-    })
+    return json_ok({"message": "Response deleted successfully"})
