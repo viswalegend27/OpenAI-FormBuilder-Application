@@ -16,6 +16,7 @@ window._remoteEl = null;
 window._verifiedData = null;
 
 const INTERVIEW_ID = window.INTERVIEW_ID || "";
+const voiceLog = (...args) => console.log("[Voice]", ...args);
 
 const conversationMessages = [];
 let isNewAssistantResponse = true;
@@ -178,6 +179,7 @@ async function startVoice() {
             return;
         }
 
+        voiceLog("Starting session for interview", INTERVIEW_ID);
         status && (status.textContent = "Requesting mic...");
         const mic = await navigator.mediaDevices.getUserMedia({
             audio: { echoCancellation: true, noiseSuppression: true }
@@ -317,6 +319,7 @@ async function startVoice() {
         if (!ephemeralKey) throw new Error("No ephemeral key");
 
         status && (status.textContent = "Exchanging SDP...");
+        voiceLog("Received realtime session", sess.id);
         // -- [API CALL]: Exchange SDP with OpenAI Realtime API using ephemeral key
         const oaResp = await fetch(
             `https://api.openai.com/v1/realtime?model=${encodeURIComponent(sess.model)}`,
@@ -352,6 +355,11 @@ async function saveConversationToServer(sessionId = null) {
     }
 
     try {
+        voiceLog("Persisting conversation", {
+            sessionId,
+            messages: validMessages.length,
+            interviewId: INTERVIEW_ID
+        });
         $("status") && ($("status").textContent = "Saving conversation...");
         // -- [API CALL]: Save conversation messages to backend
         const saveResp = await fetch("/api/conversation/", {

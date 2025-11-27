@@ -80,6 +80,7 @@ def build_session_payload(request) -> dict:
     interview_questions: list[str] | None = None
 
     if interview_id:
+        print(f"[SESSION] Requested interview_id={interview_id}")
         interview = (
             InterviewForm.objects.prefetch_related("questions")
             .filter(id=interview_id)
@@ -87,7 +88,13 @@ def build_session_payload(request) -> dict:
         )
         if interview:
             interview_questions = interview.question_texts()
+            print(
+                f"[SESSION] Using interview {interview.id} with "
+                f"{len(interview_questions)} questions"
+            )
             payload["instructions"] = C.build_interview_instructions(interview)
+        else:
+            logger.warning("Interview %s not found for session payload", interview_id)
 
     if body.get("assessment_mode"):
         qualification = body.get("qualification", "")
@@ -99,11 +106,25 @@ def build_session_payload(request) -> dict:
                 interview_questions = [
                     str(item).strip() for item in questions_from_body if str(item).strip()
                 ]
+                print(
+                    "[SESSION] Using question payload from frontend: "
+                    f"{len(interview_questions)} items"
+                )
+
+        if not interview_questions:
+            raise AppError(
+                "Assessment questions are missing. Reopen the interview builder and retry.",
+                status=400,
+            )
 
         payload["instructions"] = C.get_assessment_persona(
             qualification,
             experience,
             questions=interview_questions,
+        )
+        print(
+            f"[SESSION] Built assessment persona for {qualification}/{experience} "
+            f"with {len(interview_questions)} questions"
         )
         payload.pop("tools", None)
         payload.pop("tool_choice", None)
@@ -118,15 +139,18 @@ def build_session_payload(request) -> dict:
 
 def interview_builder(request):
     """Render interview creation and listing page."""
-    interviews = (
+    interviews_queryset = (
         InterviewForm.objects.prefetch_related("questions").order_by("-updated_at")
     )
+    interviews = list(interviews_queryset)
+    print(f"[INTERVIEW_BUILDER] Loaded {len(interviews)} interviews")
+
     return render(
         request,
         "form_ai/interviews.html",
         {
             "interviews": interviews,
-            "existing_count": interviews.count(),
+            "existing_count": len(interviews),
         },
     )
 
@@ -144,6 +168,8 @@ def voice_page(request, interview_id: str | None = None):
         {"number": idx, "text": text}
         for idx, text in enumerate(interview.question_texts(), start=1)
     ]
+
+    print(f"[VOICE_PAGE] Loaded interview {interview.id} for realtime session")
 
     return render(
         request,
@@ -239,6 +265,7 @@ def create_realtime_session(request):
 def create_interview(request):
     """Create interview form with its ordered questions."""
     body = safe_json_parse(request.body)
+    print(f"[CREATE_INTERVIEW] Raw payload: {body}")
 
     title = validate_field(body, "title", str)
     if not title or not title.strip():
@@ -272,6 +299,10 @@ def create_interview(request):
 
     redirect_path = reverse("voice_page", args=[interview.id])
     redirect_url = request.build_absolute_uri(redirect_path)
+    print(
+        f"[CREATE_INTERVIEW] Created interview {interview.id} "
+        f"({len(cleaned_questions)} questions)"
+    )
 
     return json_ok(
         {
@@ -280,6 +311,46 @@ def create_interview(request):
             "redirect_url": redirect_url,
         },
         status=201,
+    )
+
+
+@csrf_exempt
+@require_http_methods(["DELETE"])
+@handle_view_errors("Failed to delete interview question")
+@transaction.atomic
+def delete_interview_question(request, question_id: int):
+    """Delete a single interview question and resequence the remainder."""
+    question = get_object_or_fail(
+        InterviewQuestion.objects.select_related("form"), id=question_id
+    )
+    form = question.form
+
+    if form.questions.count() <= 1:
+        raise AppError(
+            "At least one question is required per interview. Add another question before deleting this one.",
+            status=400,
+        )
+
+    print(
+        f"[DELETE_QUESTION] Removing Q{question.sequence_number} "
+        f"from interview {form.id}"
+    )
+    question.delete()
+
+    # Resequence remaining questions for consistent ordering
+    remaining = form.questions.order_by("sequence_number", "id")
+    for idx, item in enumerate(remaining, start=1):
+        if item.sequence_number != idx:
+            InterviewQuestion.objects.filter(id=item.id).update(
+                sequence_number=idx
+            )
+
+    return json_ok(
+        {
+            "interview_id": str(form.id),
+            "question_id": question_id,
+            "remaining_questions": remaining.count(),
+        }
     )
 
 
@@ -377,9 +448,14 @@ def generate_assessment(request, conv_id: int):
         )
 
     interview_form = conversation.interview_form
-    questions_list = (
-        interview_form.question_texts() if interview_form else C.get_questions()
-    )
+    if not interview_form:
+        logger.error("[GENERATE] Conversation %s missing interview reference", conv_id)
+        return json_fail(
+            "Interview reference missing. Please create a new voice interview from the builder.",
+            status=400,
+        )
+
+    questions_list = interview_form.question_texts()
 
     if not questions_list:
         return json_fail(
@@ -402,6 +478,10 @@ def generate_assessment(request, conv_id: int):
             )
             for idx, text in enumerate(questions_list, start=1)
         ]
+    )
+    print(
+        f"[GENERATE] Assessment {assessment.id} created with "
+        f"{len(questions_list)} questions for interview {interview_form.id}"
     )
 
     # Generate secure URL

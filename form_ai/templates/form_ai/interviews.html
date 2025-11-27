@@ -23,11 +23,11 @@
     </header>
 
     <main class="layout">
-        <section class="builder-panel">
+        <section class="panel builder-panel">
             <div class="panel-header">
                 <div>
-                    <h2>New Interview</h2>
-                    <p>Create a tailored set of questions for a role.</p>
+                    <h2>Design a new interview</h2>
+                    <p class="muted-text">Capture the role details, tone, and ordered questions you need.</p>
                 </div>
                 <button id="add-question" class="control-btn secondary" type="button">+ Add question</button>
             </div>
@@ -67,23 +67,25 @@
                 </div>
 
                 <div class="form-actions">
-                    <button type="submit" class="control-btn primary">Create &amp; start interview</button>
+                    <button type="submit" class="control-btn primary">Save &amp; start interview</button>
                 </div>
             </form>
         </section>
 
-        <section class="list-panel">
+        <section class="panel list-panel">
             <div class="panel-header">
                 <div>
                     <h2>Existing interviews</h2>
-                    <p>{{ existing_count }} configured</p>
+                    <p class="panel-subtitle">
+                        {{ existing_count }} configured · reuse an interview to keep your AI prompts consistent.
+                    </p>
                 </div>
             </div>
 
             {% if interviews %}
             <div class="interview-list">
                 {% for interview in interviews %}
-                <article class="interview-card">
+                <article class="interview-card" data-interview-id="{{ interview.id }}">
                     <header>
                         <h3>{{ interview.title }}</h3>
                         {% if interview.role %}
@@ -92,18 +94,29 @@
                     </header>
                     {% if interview.summary %}
                     <p class="summary-text">{{ interview.summary }}</p>
+                    {% else %}
+                    <p class="summary-text muted-text">No summary provided yet.</p>
                     {% endif %}
 
                     {% with questions=interview.questions.all %}
-                    <div class="question-preview">
+                    <div class="question-preview" data-question-count="{{ questions|length }}">
                         <p class="question-count">{{ questions|length }} questions</p>
                         <ul>
-                            {% for question in questions|slice:":3" %}
-                            <li>{{ forloop.counter }}. {{ question.question_text }}</li>
+                            {% for question in questions %}
+                            <li class="question-item" data-question-id="{{ question.id }}">
+                                <span class="question-label">{{ forloop.counter }}.</span>
+                                <span class="question-text">{{ question.question_text }}</span>
+                                <button
+                                    type="button"
+                                    class="delete-question-btn"
+                                    data-question-id="{{ question.id }}"
+                                    aria-label="Delete question {{ forloop.counter }}">
+                                    ×
+                                </button>
+                            </li>
+                            {% empty %}
+                            <li class="muted-text">No questions yet.</li>
                             {% endfor %}
-                            {% if questions|length > 3 %}
-                            <li class="muted-text">+ {{ questions|length|add:"-3" }} more</li>
-                            {% endif %}
                         </ul>
                     </div>
                     {% endwith %}

@@ -1,16 +1,14 @@
 :root {
-    font-size: 16px;
-    --bg: #0f1115;
-    --panel: #181b20;
-    --panel-alt: #121419;
-    --border: #2a2f37;
-    --text: #f4f6fb;
-    --muted: #9aa3b7;
-    --accent: #4cc9f0;
-    --accent-muted: rgba(76, 201, 240, 0.15);
-    --danger: #f25f5c;
-    --success: #90ee90;
-    --shadow: 0 20px 45px rgba(0, 0, 0, 0.35);
+    --bg: #f0f4f8;
+    --panel-bg: #ffffff;
+    --panel-muted: #f8fafc;
+    --border: #d7dce5;
+    --text: #1b1f27;
+    --muted: #5b6474;
+    --accent: #0f828c;
+    --accent-dark: #0a5c64;
+    --shadow: 0 10px 25px rgba(15, 130, 140, 0.08);
+    --danger: #d9534f;
 }
 
 *,
@@ -22,122 +20,117 @@
 body {
     margin: 0;
     min-height: 100vh;
-    background: radial-gradient(circle at top, #1a1e24, #0b0d12 60%);
-    color: var(--text);
     font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
 }
 
 a {
-    color: inherit;
     text-decoration: none;
+    color: inherit;
 }
 
 .header {
     display: flex;
+    align-items: center;
     justify-content: space-between;
-    align-items: flex-start;
-    padding: 2.5rem;
-    gap: 1.5rem;
+    padding: 2rem clamp(1rem, 4vw, 3rem);
 }
 
 .eyebrow {
     letter-spacing: 0.15em;
     text-transform: uppercase;
     color: var(--muted);
-    font-size: 0.8rem;
-    margin: 0 0 0.75rem;
+    font-size: 0.75rem;
+    margin-bottom: 0.25rem;
 }
 
 .header h1 {
     margin: 0;
-    font-size: clamp(2rem, 4vw, 2.8rem);
+    font-size: clamp(2rem, 4.5vw, 2.8rem);
 }
 
 .subtitle {
-    margin: 0.5rem 0 0;
+    margin: 0.35rem 0 0;
     color: var(--muted);
 }
 
-.header-actions .control-btn {
-    margin-left: 1rem;
+.header-actions {
+    display: flex;
+    gap: 0.75rem;
 }
 
 .layout {
     display: grid;
     grid-template-columns: 3fr 2fr;
-    gap: 2rem;
-    padding: 0 2.5rem 3rem;
+    gap: 1.75rem;
+    padding: 0 clamp(1rem, 4vw, 3rem) 3rem;
 }
 
-.builder-panel,
-.list-panel {
-    background: var(--panel);
+.panel {
+    background: var(--panel-bg);
+    border-radius: 18px;
     border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 2rem;
     box-shadow: var(--shadow);
+    padding: clamp(1.5rem, 4vw, 2rem);
 }
 
-.panel-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1.5rem;
-    gap: 1rem;
-}
-
-.panel-header h2 {
+.panel h2 {
     margin: 0;
 }
 
 .control-btn {
-    border: none;
-    border-radius: 999px;
-    padding: 0.65rem 1.5rem;
-    font-size: 0.95rem;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    padding: 0.65rem 1.4rem;
+    font-weight: 600;
     cursor: pointer;
-    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.2s;
-    color: #fff;
-    background: var(--border);
+    background: #fff;
+    color: var(--accent);
+    transition: background 0.2s ease, color 0.2s ease, border 0.2s ease;
 }
 
 .control-btn.primary {
-    background: linear-gradient(120deg, #4cc9f0, #4361ee);
-    box-shadow: 0 12px 25px rgba(76, 201, 240, 0.25);
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+    box-shadow: 0 8px 16px rgba(15, 130, 140, 0.2);
 }
 
 .control-btn.secondary {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--panel-muted);
+    color: var(--accent);
 }
 
-.control-btn:hover {
-    transform: translateY(-1px);
+.control-btn:hover:not(:disabled) {
+    background: var(--accent-dark);
+    color: #fff;
+    border-color: var(--accent-dark);
 }
 
 .form-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
     gap: 1.25rem;
+    margin-bottom: 1.25rem;
 }
 
 .form-field {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    margin-bottom: 1.25rem;
-    font-size: 0.95rem;
+    gap: 0.4rem;
     color: var(--muted);
+    font-size: 0.95rem;
 }
 
 .form-field input,
 .form-field textarea {
-    width: 100%;
-    border-radius: 12px;
+    border-radius: 10px;
     border: 1px solid var(--border);
-    background: var(--panel-alt);
-    color: var(--text);
     padding: 0.85rem 1rem;
     font-size: 1rem;
+    background: var(--panel-muted);
+    color: var(--text);
     transition: border 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -145,39 +138,38 @@ a {
 .form-field textarea:focus {
     outline: none;
     border-color: var(--accent);
-    box-shadow: 0 0 0 2px var(--accent-muted);
+    box-shadow: 0 0 0 2px rgba(15, 130, 140, 0.1);
+    background: #fff;
 }
 
 .questions-wrapper {
     margin-top: 1rem;
     padding: 1.5rem;
-    border-radius: 16px;
+    border-radius: 14px;
     border: 1px solid var(--border);
-    background: var(--panel-alt);
+    background: var(--panel-muted);
 }
 
 .questions-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 0.75rem;
     flex-wrap: wrap;
-    gap: 0.5rem;
-    margin-bottom: 1.25rem;
 }
 
 .pill {
-    background: var(--accent-muted);
+    border-radius: 999px;
+    background: rgba(15, 130, 140, 0.12);
     color: var(--accent);
     padding: 0.35rem 0.9rem;
-    border-radius: 999px;
     font-size: 0.85rem;
 }
 
 .question-row {
     display: flex;
-    align-items: flex-start;
-    gap: 0.8rem;
-    margin-bottom: 1rem;
+    gap: 0.75rem;
+    margin-top: 1rem;
 }
 
 .question-row input {
@@ -185,29 +177,34 @@ a {
 }
 
 .remove-question {
-    background: rgba(242, 95, 92, 0.15);
-    color: var(--danger);
     border-radius: 10px;
-    border: none;
-    padding: 0.55rem 0.85rem;
+    border: 1px solid transparent;
+    padding: 0.5rem 0.95rem;
+    background: rgba(217, 83, 79, 0.1);
+    color: var(--danger);
     cursor: pointer;
-    transition: background 0.2s ease;
+    font-weight: 600;
 }
 
 .remove-question:hover {
-    background: rgba(242, 95, 92, 0.25);
+    background: rgba(217, 83, 79, 0.2);
 }
 
 .form-actions {
-    margin-top: 2rem;
+    margin-top: 1.5rem;
     display: flex;
     justify-content: flex-end;
+}
+
+.list-panel .panel-subtitle {
+    margin-bottom: 1.5rem;
+    color: var(--muted);
 }
 
 .interview-list {
     display: flex;
     flex-direction: column;
-    gap: 1.25rem;
+    gap: 1rem;
     max-height: calc(100vh - 220px);
     overflow-y: auto;
     padding-right: 0.5rem;
@@ -215,23 +212,29 @@ a {
 
 .interview-card {
     border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 1.5rem;
-    background: rgba(255, 255, 255, 0.02);
+    border-radius: 14px;
+    padding: 1.25rem;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
 }
 
-.interview-card header h3 {
-    margin: 0 0 0.4rem;
+.interview-card header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
 }
 
 .role-label {
-    margin: 0;
+    font-size: 0.9rem;
     color: var(--muted);
-    font-size: 0.95rem;
 }
 
 .summary-text {
     color: var(--muted);
+    font-size: 0.95rem;
 }
 
 .question-preview ul {
@@ -239,11 +242,43 @@ a {
     margin: 0.5rem 0 0;
     padding: 0;
     color: var(--text);
+    font-size: 0.95rem;
 }
 
 .question-preview li {
-    margin-bottom: 0.4rem;
-    font-size: 0.95rem;
+    margin-bottom: 0.35rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.question-label {
+    font-weight: 600;
+    color: var(--muted);
+}
+
+.question-text {
+    flex: 1;
+}
+
+.delete-question-btn {
+    border: none;
+    background: rgba(217, 83, 79, 0.12);
+    color: var(--danger);
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    line-height: 1;
+    font-size: 1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s ease;
+}
+
+.delete-question-btn:hover {
+    background: rgba(217, 83, 79, 0.25);
 }
 
 .muted-text {
@@ -252,16 +287,16 @@ a {
 }
 
 .card-actions {
-    margin-top: 1rem;
     display: flex;
     justify-content: flex-end;
 }
 
 .empty-state {
-    border: 1px dashed var(--border);
-    border-radius: 16px;
     padding: 2rem;
     text-align: center;
+    border: 1px dashed var(--border);
+    border-radius: 14px;
+    background: var(--panel-muted);
     color: var(--muted);
 }
 
@@ -272,11 +307,11 @@ a {
     transform: translateX(-50%) translateY(150%);
     background: rgba(0, 0, 0, 0.85);
     color: #fff;
-    padding: 0.85rem 1.4rem;
+    padding: 0.85rem 1.2rem;
     border-radius: 999px;
-    transition: transform 0.25s ease, opacity 0.25s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease;
     opacity: 0;
-    z-index: 20;
+    z-index: 10;
 }
 
 .toast.show {

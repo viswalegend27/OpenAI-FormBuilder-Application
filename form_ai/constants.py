@@ -151,7 +151,12 @@ def get_assessment_persona(
     questions: List[str] | None = None,
 ) -> str:
     """Generate assessment instructions for technical interview."""
-    question_list = questions or get_questions()
+    if not questions:
+        raise ValueError("Assessment questions must be provided from the database")
+
+    question_list = [q.strip() for q in questions if q and q.strip()]
+    if not question_list:
+        raise ValueError("No valid assessment questions were supplied")
     questions_formatted = _format_questions(question_list)
 
     return f"""You are Tyler, Techjays' technical interviewer.
@@ -175,8 +180,9 @@ def build_interview_instructions(interview: InterviewForm) -> str:
 
     question_texts = interview.question_texts()
     if not question_texts:
-        # Fallback to file-based questions to avoid empty prompts
-        question_texts = get_questions()
+        raise ValueError(
+            f"Interview form '{interview.id}' does not have any questions configured"
+        )
 
     questions_formatted = _format_questions(question_texts)
     role = interview.role or interview.title

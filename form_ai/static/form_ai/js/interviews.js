@@ -1,3 +1,5 @@
+const builderLog = (...args) => console.log("[InterviewBuilder]", ...args);
+
 class Toast {
     constructor(el) {
         this.el = el;
@@ -52,6 +54,7 @@ class QuestionManager {
         row.append(input, removeBtn);
         this.listEl.appendChild(row);
         this.updateCount();
+        builderLog("Question row added", { order: this.listEl.children.length, value });
     }
 
     removeQuestion(row) {
@@ -90,6 +93,7 @@ class InterviewBuilderApp {
         this.submitBtn = this.form?.querySelector("button[type='submit']");
         this.questionManager = new QuestionManager(this.questionList, this.questionCount);
         this.bindEvents();
+        builderLog("Builder initialized");
     }
 
     bindEvents() {
@@ -119,6 +123,7 @@ class InterviewBuilderApp {
             return null;
         }
 
+        builderLog("Collected payload", payload);
         return payload;
     }
 
@@ -131,6 +136,7 @@ class InterviewBuilderApp {
 
         try {
             this.setLoading(true);
+            builderLog("Submitting interview creation");
             const response = await fetch("/api/interviews/", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -139,14 +145,17 @@ class InterviewBuilderApp {
 
             const data = await response.json().catch(() => ({}));
             if (!response.ok) {
+                builderLog("Interview creation failed", data);
                 throw new Error(data.error || "Failed to create interview");
             }
 
+            builderLog("Interview created", data);
             this.toast.show("Interview created. Redirecting...");
             setTimeout(() => {
                 window.location.assign(data.redirect_url || "/");
             }, 1200);
         } catch (error) {
+            builderLog("Creation error", error);
             this.toast.show(error.message || "Something went wrong");
         } finally {
             this.setLoading(false);
@@ -156,10 +165,78 @@ class InterviewBuilderApp {
     setLoading(state) {
         if (!this.submitBtn) return;
         this.submitBtn.disabled = state;
-        this.submitBtn.textContent = state ? "Creating..." : "Create & start interview";
+        this.submitBtn.textContent = state ? "Saving..." : "Save & start interview";
+    }
+}
+
+class ExistingInterviewManager {
+    constructor(toast) {
+        this.toast = toast;
+        this.bindDeleteButtons();
+    }
+
+    bindDeleteButtons() {
+        document.querySelectorAll(".delete-question-btn").forEach((btn) => {
+            if (btn._wired) return;
+            btn._wired = true;
+            btn.addEventListener("click", () => this.handleDelete(btn));
+        });
+    }
+
+    async handleDelete(button) {
+        const questionId = button.dataset.questionId;
+        if (!questionId) return;
+        if (!window.confirm("Delete this question from the interview?")) return;
+
+        const questionItem = button.closest(".question-item");
+        const card = button.closest(".interview-card");
+
+        button.disabled = true;
+        const originalLabel = button.textContent;
+        button.textContent = "…";
+
+        try {
+            const response = await fetch(
+                `/api/interviews/questions/${questionId}/`,
+                { method: "DELETE" }
+            );
+            const data = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                throw new Error(data.error || "Failed to delete question");
+            }
+
+            questionItem?.remove();
+            this.resequenceQuestions(card);
+            this.toast?.show?.("Question deleted");
+        } catch (error) {
+            console.error("Delete question failed", error);
+            this.toast?.show?.(error.message || "Delete failed");
+        } finally {
+            button.disabled = false;
+            button.textContent = originalLabel;
+        }
+    }
+
+    resequenceQuestions(card) {
+        if (!card) return;
+        const items = card.querySelectorAll(".question-item");
+        const countLabel = card.querySelector(".question-count");
+
+        items.forEach((item, idx) => {
+            const labelEl = item.querySelector(".question-label");
+            if (labelEl) {
+                labelEl.textContent = `${idx + 1}.`;
+            }
+        });
+
+        if (countLabel) {
+            countLabel.textContent = `${items.length} question${items.length === 1 ? "" : "s"}`;
+        }
     }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-    new InterviewBuilderApp();
+    const builder = new InterviewBuilderApp();
+    new ExistingInterviewManager(builder.toast);
 });
