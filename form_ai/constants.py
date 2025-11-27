@@ -4,7 +4,7 @@ import os
 import logging
 from pathlib import Path
 from functools import lru_cache
-from typing import List, Sequence, Optional
+from typing import Any, List, Sequence, Optional
 
 from django.conf import settings
 
@@ -158,12 +158,20 @@ def get_session_payload() -> dict:
     }
 
 
-def build_verify_tool(extraction_keys: List[str]) -> dict:
+def build_verify_tool(fields: List[dict[str, Any]]) -> dict:
     """Build dynamic verify_information tool based on interview questions."""
-    properties = {
-        key: {"type": "string", "description": f"Captured {key}"}
-        for key in extraction_keys
-    }
+    properties: dict[str, dict[str, str]] = {}
+    required: List[str] = []
+
+    for field in fields:
+        key = field["key"]
+        description = field.get("description") or field.get("label") or key
+        properties[key] = {
+            "type": "string",
+            "description": description,
+        }
+        if field.get("required", True):
+            required.append(key)
 
     return {
         "type": "function",
@@ -172,7 +180,7 @@ def build_verify_tool(extraction_keys: List[str]) -> dict:
         "parameters": {
             "type": "object",
             "properties": properties,
-            "required": extraction_keys,
+            "required": required,
         },
     }
 

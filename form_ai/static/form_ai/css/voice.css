@@ -360,6 +360,9 @@ color: var(--text);
 
 .popup-body {
 margin-bottom: 1.5rem;
+max-height: 60vh;
+overflow-y: auto;
+padding-right: 0.5rem;
 }
 
 .field-group {
@@ -373,7 +376,8 @@ font-weight: 500;
 color: var(--text);
 }
 
-.field-group input {
+.field-group input,
+.field-group textarea {
 width: 100%;
 padding: 0.75rem;
 border: 1px solid var(--border);
@@ -381,7 +385,18 @@ border-radius: 8px;
 font-size: 1rem;
 }
 
-.field-group input:focus {
+.field-group textarea {
+resize: vertical;
+min-height: 90px;
+line-height: 1.4;
+}
+
+.field-group.question-field label {
+font-weight: 600;
+}
+
+.field-group input:focus,
+.field-group textarea:focus {
 outline: none;
 border-color: var(--primary);
 }

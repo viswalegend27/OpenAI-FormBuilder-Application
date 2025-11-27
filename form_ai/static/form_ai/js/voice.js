@@ -22,6 +22,15 @@ const voiceLog = (...args) => console.log("[Voice]", ...args);
 const conversationMessages = [];
 let isNewAssistantResponse = true;
 
+const VERIFICATION_FIELDS = Array.isArray(window.VERIFICATION_FIELDS)
+    ? window.VERIFICATION_FIELDS
+    : [];
+const verificationFieldLookup = {};
+const verificationInputMap = new Map();
+VERIFICATION_FIELDS.forEach((field) => {
+    verificationFieldLookup[field.key] = field;
+});
+
 const pushMessage = (role, text) => {
     if (!text || !text.trim()) return;
     conversationMessages.push({
@@ -69,6 +78,53 @@ function toast(msg, ms = 3000) {
         }, ms);
     });
 }
+
+function renderVerificationFields() {
+    const container = $("verification-fields-container");
+    if (!container) return;
+
+    container.innerHTML = "";
+
+    if (!VERIFICATION_FIELDS.length) {
+        const emptyState = document.createElement("p");
+        emptyState.className = "muted-text";
+        emptyState.textContent = "No verification fields configured.";
+        container.appendChild(emptyState);
+        return;
+    }
+
+    VERIFICATION_FIELDS.forEach((field) => {
+        const wrapper = document.createElement("div");
+        wrapper.className = "field-group";
+        if (field.source === "question") {
+            wrapper.classList.add("question-field");
+        }
+
+        const label = document.createElement("label");
+        label.setAttribute("for", `verify-${field.key}`);
+        label.textContent = field.label || field.key;
+
+        const input =
+            field.type === "textarea"
+                ? document.createElement("textarea")
+                : document.createElement("input");
+        input.id = `verify-${field.key}`;
+        input.dataset.key = field.key;
+        input.placeholder = field.placeholder || field.label || field.key;
+
+        if (field.type === "textarea") {
+            input.rows = Math.min(6, Math.max(3, Math.ceil((input.placeholder.length || 80) / 40)));
+        } else {
+            input.type = field.input_type || "text";
+        }
+
+        wrapper.append(label, input);
+        container.appendChild(wrapper);
+        verificationInputMap.set(field.key, input);
+    });
+}
+
+renderVerificationFields();
 
 const appendMessageToDom = (role, text = "", saveToMemory = true) => {
     const conv = $("conversation");
@@ -124,9 +180,17 @@ const finalize = (el, text) => {
 
 function showVerificationPopup(data) {
     const popup = $("verification-popup");
-    $("verify-name").value = data.name || "";
-    $("verify-qualification").value = data.qualification || "";
-    $("verify-experience").value = data.experience || "";
+    if (!popup) return;
+
+    VERIFICATION_FIELDS.forEach((field) => {
+        const input = verificationInputMap.get(field.key);
+        if (input) {
+            const fallback = window._verifiedData?.[field.key];
+            const value = data && data[field.key] !== undefined ? data[field.key] : fallback || "";
+            input.value = value;
+        }
+    });
+
     popup.style.display = "flex";
 }
 
@@ -134,14 +198,18 @@ function hideVerificationPopup() {
     $("verification-popup").style.display = "none";
 }
 
-const VERIFIED_FIELDS = ["name", "qualification", "experience"];
-
 function normalizeVerifiedData(data) {
-    if (!data) return null;
+    if (!data || !VERIFICATION_FIELDS.length) return null;
     const cleaned = {};
-    VERIFIED_FIELDS.forEach((field) => {
-        const value = (data[field] || "").toString().trim();
-        if (value) cleaned[field] = value;
+    VERIFICATION_FIELDS.forEach((field) => {
+        const rawValue = data[field.key];
+        if (rawValue === undefined || rawValue === null) {
+            return;
+        }
+        const value = rawValue.toString().trim();
+        if (value) {
+            cleaned[field.key] = value;
+        }
     });
     return Object.keys(cleaned).length ? cleaned : null;
 }
@@ -153,10 +221,14 @@ function getVerifiedDataPayload() {
 function buildVerificationSummary(cleaned) {
     if (!cleaned) return "";
     const lines = ["Candidate confirmed their details:"];
-    VERIFIED_FIELDS.forEach((field) => {
-        if (cleaned[field]) {
-            const label = field.charAt(0).toUpperCase() + field.slice(1);
-            lines.push(`- ${label}: ${cleaned[field]}`);
+    VERIFICATION_FIELDS.forEach((field) => {
+        const value = cleaned[field.key];
+        if (!value) return;
+        const label = field.label || field.key;
+        if (field.source === "question" && field.sequence_number) {
+            lines.push(`- Q${field.sequence_number}: ${label}\n  ${value}`);
+        } else {
+            lines.push(`- ${label}: ${value}`);
         }
     });
     return lines.join("\n");
@@ -192,11 +264,11 @@ function sendVerifyToolOutput(status, data = null) {
 // Setup verification popup handlers
 (() => {
     $("verify-confirm")?.addEventListener("click", () => {
-        window._verifiedData = {
-            name: $("verify-name").value.trim(),
-            qualification: $("verify-qualification").value.trim(),
-            experience: $("verify-experience").value.trim()
-        };
+        const latestValues = {};
+        verificationInputMap.forEach((input, key) => {
+            latestValues[key] = input.value.trim();
+        });
+        window._verifiedData = latestValues;
         hideVerificationPopup();
 
         const cleaned = getVerifiedDataPayload();

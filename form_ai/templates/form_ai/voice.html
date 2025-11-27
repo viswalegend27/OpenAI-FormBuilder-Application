@@ -74,20 +74,7 @@
   <div id="verification-popup" class="popup-overlay">
     <div class="popup-content">
       <h2>Verify Your Information</h2>
-      <div class="popup-body">
-        <div class="field-group">
-          <label>Name:</label>
-          <input type="text" id="verify-name" placeholder="Your full name" />
-        </div>
-        <div class="field-group">
-          <label>Qualification:</label>
-          <input type="text" id="verify-qualification" placeholder="Your qualification" />
-        </div>
-        <div class="field-group">
-          <label>Experience:</label>
-          <input type="text" id="verify-experience" placeholder="Years of experience" />
-        </div>
-      </div>
+      <div class="popup-body" id="verification-fields-container"></div>
       <div class="popup-actions">
         <button id="verify-cancel" class="control-btn">Cancel</button>
         <button id="verify-confirm" class="control-btn primary">Confirm</button>
@@ -97,12 +84,16 @@
 
   <div id="toast-message" class="toast" role="status" aria-live="polite"></div>
   {{ questions|json_script:"interview-questions" }}
+  {{ verification_fields|json_script:"verification-fields" }}
   <script>
     window.INTERVIEW_ID = "{{ interview_id }}";
     window.INTERVIEW_TITLE = "{{ interview.title|escapejs }}";
     window.INTERVIEW_ROLE = "{{ interview.role|default:''|escapejs }}";
     window.INTERVIEW_QUESTIONS = JSON.parse(
       document.getElementById("interview-questions").textContent || "[]"
+    );
+    window.VERIFICATION_FIELDS = JSON.parse(
+      document.getElementById("verification-fields").textContent || "[]"
     );
   </script>
   <script src="{% static 'form_ai/js/voice.js' %}"></script>

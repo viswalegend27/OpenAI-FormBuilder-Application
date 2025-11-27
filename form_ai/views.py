@@ -36,7 +36,6 @@ logger = logging.getLogger(__name__)
 # Constants
 # ============================================================================
 
-DEFAULT_EXTRACTION_KEYS = ["name", "qualification", "experience"]
 ASSESSMENT_TOKEN_MAX_AGE = 60 * 60 * 24 * 7  # 7 days
 
 
@@ -68,6 +67,90 @@ token_manager = AssessmentTokenManager()
 
 
 # ============================================================================
+# Verification Schema Helpers
+# ============================================================================
+
+BASE_VERIFICATION_FIELDS: list[dict[str, Any]] = [
+    {
+        "key": "name",
+        "label": "Full name",
+        "placeholder": "Your full name",
+        "description": "Candidate's full name as stated during the interview",
+        "required": True,
+        "type": "text",
+        "input_type": "text",
+        "source": "profile",
+    },
+    {
+        "key": "qualification",
+        "label": "Qualification",
+        "placeholder": "Your highest qualification",
+        "description": "Highest qualification (degree, specialization, graduation year)",
+        "required": True,
+        "type": "text",
+        "input_type": "text",
+        "source": "profile",
+    },
+    {
+        "key": "experience",
+        "label": "Years of experience",
+        "placeholder": "Total years of relevant experience",
+        "description": "Total years of relevant professional experience",
+        "required": True,
+        "type": "text",
+        "input_type": "text",
+        "source": "profile",
+    },
+]
+
+
+def duplicate_fields(fields: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return a shallow copy of field definitions to avoid mutation."""
+    return [field.copy() for field in fields]
+
+
+def build_question_field(question: InterviewQuestion) -> dict[str, Any]:
+    """Create a verification field descriptor for a specific interview question."""
+    return {
+        "key": f"question_{question.sequence_number}",
+        "label": question.question_text.strip(),
+        "placeholder": "Confirm the candidate's answer",
+        "description": (
+            f"Candidate's answer for Q{question.sequence_number}: "
+            f"{question.question_text.strip()}"
+        ),
+        "sequence_number": question.sequence_number,
+        "question_id": str(question.id),
+        "required": True,
+        "type": "textarea",
+        "input_type": "text",
+        "source": "question",
+    }
+
+
+def build_verification_fields(interview: InterviewForm | None) -> list[dict[str, Any]]:
+    """Compose verification field metadata for the given interview."""
+    fields = duplicate_fields(BASE_VERIFICATION_FIELDS)
+
+    if not interview:
+        return fields
+
+    for question in interview.ordered_questions():
+        fields.append(build_question_field(question))
+
+    return fields
+
+
+def get_verification_schema(
+    interview: InterviewForm | None,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Return field metadata and extraction keys for verification."""
+    fields = build_verification_fields(interview)
+    keys = [field["key"] for field in fields]
+    return fields, keys
+
+
+# ============================================================================
 # Helper Functions
 # ============================================================================
 
@@ -85,6 +168,7 @@ def build_session_payload(request) -> dict:
     interview_id = request.GET.get("interview_id") or body.get("interview_id")
     interview = None
     interview_questions: list[str] | None = None
+    verification_fields, extraction_keys = get_verification_schema(None)
 
     if interview_id:
         logger.info(f"[SESSION] Requested interview_id={interview_id}")
@@ -94,23 +178,13 @@ def build_session_payload(request) -> dict:
             .first()
         )
         if interview:
+            verification_fields, extraction_keys = get_verification_schema(interview)
             interview_questions = interview.question_texts()
             logger.info(
                 f"[SESSION] Using interview {interview.id} with "
                 f"{len(interview_questions)} questions"
             )
             payload["instructions"] = C.build_interview_instructions(interview)
-
-            # Allow the assistant to trigger verification once it has structured data
-            extraction_keys = DEFAULT_EXTRACTION_KEYS
-            payload["tools"] = [C.build_verify_tool(extraction_keys)]
-            logger.info(
-                "[SESSION] Attached interview instructions and verify tool. interview=%s, questions=%d, tools=%s",
-                interview.id,
-                len(interview_questions),
-                [tool.get("name") for tool in payload.get("tools", [])],
-            )
-
         else:
             logger.warning("Interview %s not found for session payload", interview_id)
 
@@ -148,6 +222,14 @@ def build_session_payload(request) -> dict:
         )
         payload.pop("tools", None)
         payload.pop("tool_choice", None)
+    else:
+        payload["tools"] = [C.build_verify_tool(verification_fields)]
+        payload["tool_choice"] = "auto"
+        logger.info(
+            "[SESSION] Attached verify tool with %d fields (%s)",
+            len(extraction_keys),
+            ", ".join(extraction_keys),
+        )
 
     instructions_preview = " ".join(
         (payload.get("instructions") or "").splitlines()
@@ -163,13 +245,15 @@ def build_session_payload(request) -> dict:
     return payload
 
 
-def clean_verified_data(data: Dict[str, Any] | None) -> Dict[str, str]:
+def clean_verified_data(
+    data: Dict[str, Any] | None, allowed_keys: list[str]
+) -> Dict[str, str]:
     """Normalize user-provided verification overrides."""
-    if not isinstance(data, dict):
+    if not isinstance(data, dict) or not allowed_keys:
         return {}
 
     cleaned: Dict[str, str] = {}
-    for field in DEFAULT_EXTRACTION_KEYS:
+    for field in allowed_keys:
         value = data.get(field)
         if value is None:
             continue
@@ -217,6 +301,8 @@ def voice_page(request, interview_id: str | None = None):
         for idx, text in enumerate(interview.question_texts(), start=1)
     ]
 
+    verification_fields, _ = get_verification_schema(interview)
+
     print(f"[VOICE_PAGE] Loaded interview {interview.id} for realtime session")
 
     return render(
@@ -226,6 +312,7 @@ def voice_page(request, interview_id: str | None = None):
             "interview": interview,
             "interview_id": str(interview.id),
             "questions": questions,
+            "verification_fields": verification_fields,
         },
     )
 
@@ -452,11 +539,12 @@ def analyze_conversation(request):
     session_id = validate_field(body, "session_id", str)
 
     conversation = get_object_or_fail(VoiceConversation, session_id=session_id)
-    overrides = clean_verified_data(body.get("verified_data"))
+    schema_fields, extraction_keys = get_verification_schema(conversation.interview_form)
+    overrides = clean_verified_data(body.get("verified_data"), extraction_keys)
 
     client = OpenAIClient()
     extracted_data = client.extract_structured_data(
-        conversation.messages, DEFAULT_EXTRACTION_KEYS
+        conversation.messages, schema_fields
     )
 
     if overrides:

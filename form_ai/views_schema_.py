@@ -27,24 +27,51 @@ def extract_keys_from_markdown(md_text: str) -> List[str]:
     return keys
 
 
-def build_dynamic_schema(keys: List[str]) -> Dict[str, Any]:
+def build_dynamic_schema(fields: List[Dict[str, Any]]) -> Dict[str, Any]:
+    properties: Dict[str, Dict[str, Any]] = {}
+    required: List[str] = []
+
+    for field in fields:
+        key = field["key"]
+        field_schema: Dict[str, Any] = {"type": "string"}
+        description = field.get("description") or field.get("label")
+        if description:
+            field_schema["description"] = description
+        properties[key] = field_schema
+
+        if field.get("required", True):
+            required.append(key)
+
     return {
         "name": "UserAnswers",
         "schema": {
             "type": "object",
             "additionalProperties": False,
-            "properties": {k: {"type": "string"} for k in keys},
-            "required": keys,
+            "properties": properties,
+            "required": required,
         },
         "strict": True,
     }
 
 
-def build_extractor_messages(messages: List[Dict[str, Any]], keys: List[str]) -> List[Dict[str, str]]:
+def build_extractor_messages(
+    messages: List[Dict[str, Any]], fields: List[Dict[str, Any]]
+) -> List[Dict[str, str]]:
+    guide_lines = []
+    for field in fields:
+        label = field.get("label") or field["key"]
+        description = field.get("description")
+        if description and description != label:
+            guide_lines.append(f"- {field['key']}: {description}")
+        else:
+            guide_lines.append(f"- {field['key']}: {label}")
+
+    guide_text = "\n".join(guide_lines)
     system = (
-        "Extract concise answers ONLY from what the USER said for these keys: "
-        + ", ".join(keys)
-        + ". Return JSON that strictly matches the provided schema."
+        "Extract concise answers ONLY from what the USER said for the fields listed below.\n"
+        "If the conversation does not provide the answer for a field, output an empty string for that key.\n"
+        "Field guide:\n"
+        f"{guide_text}"
     )
     user = json.dumps(messages, ensure_ascii=False)
     return [
@@ -167,11 +194,11 @@ class OpenAIClient:
     def extract_structured_data(
         self,
         messages: List[Dict[str, Any]],
-        keys: List[str],
+        fields: List[Dict[str, Any]],
         model: str = "gpt-4o-mini"
     ) -> Dict[str, Any]:
         """Extract structured data from conversation messages."""
-        json_schema = build_dynamic_schema(keys)
+        json_schema = build_dynamic_schema(fields)
         
         payload = {
             "model": model,
@@ -180,7 +207,7 @@ class OpenAIClient:
                 "type": "json_schema",
                 "json_schema": json_schema
             },
-            "messages": build_extractor_messages(messages, keys),
+            "messages": build_extractor_messages(messages, fields),
         }
         
         data = post_json(self.CHAT_URL, self.headers, payload, timeout=30)
@@ -188,10 +215,10 @@ class OpenAIClient:
         try:
             content = data["choices"][0]["message"]["content"]
             parsed = json.loads(content)
-            return {k: parsed.get(k, "") for k in keys}
+            return {field["key"]: parsed.get(field["key"], "") for field in fields}
         except (KeyError, json.JSONDecodeError, IndexError) as e:
             logger.warning(f"Failed to parse extraction response: {e}")
-            return {k: "" for k in keys}
+            return {field["key"]: "" for field in fields}
     
     @staticmethod
     def parse_response_content(content: str) -> Any:
