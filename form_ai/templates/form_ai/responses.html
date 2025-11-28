@@ -101,23 +101,21 @@
                                 </div>
                             </div>
 
-                            {% if assessment.questions.exists %}
+                            {% if assessment.qa_preview %}
                             <div class="assessment-answers">
                                 <strong>Q&A</strong>
-                                {% for question in assessment.questions.all %}
+                                {% for pair in assessment.qa_preview %}
                                 <div class="answer-item">
                                     <div class="question-line">
-                                        <strong>Q{{ question.sequence_number }}:</strong>
-                                        <span class="question-text">{{ question.question_text }}</span>
+                                        <strong>Q{{ pair.number }}:</strong>
+                                        <span class="question-text">{{ pair.question }}</span>
                                     </div>
                                     <div class="answer-line">
-                                        {% with answer=question.answer %}
-                                        {% if answer and answer.response_text and answer.response_text != "NIL" %}
-                                        <span class="value-provided">{{ answer.response_text }}</span>
+                                        {% if pair.answer and pair.answer != "NIL" %}
+                                        <span class="value-provided">{{ pair.answer }}</span>
                                         {% else %}
                                         <span class="value-empty">Not answered</span>
                                         {% endif %}
-                                        {% endwith %}
                                     </div>
                                 </div>
                                 {% endfor %}

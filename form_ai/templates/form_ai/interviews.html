@@ -98,14 +98,14 @@
                     <p class="summary-text muted-text">No summary provided yet.</p>
                     {% endif %}
 
-                    {% with questions=interview.questions.all %}
+                    {% with questions=interview.question_rows %}
                     <div class="question-preview" data-question-count="{{ questions|length }}">
                         <p class="question-count">{{ questions|length }} questions</p>
                         <ul>
                             {% for question in questions %}
                             <li class="question-item" data-question-id="{{ question.id }}">
                                 <span class="question-label">{{ forloop.counter }}.</span>
-                                <span class="question-text">{{ question.question_text }}</span>
+                                <span class="question-text">{{ question.text }}</span>
                                 <button
                                     type="button"
                                     class="delete-question-btn"

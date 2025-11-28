@@ -15,11 +15,9 @@ from .helper.views_helper import AppError, json_fail, json_ok
 from .models import (
     VoiceConversation,
     TechnicalAssessment,
-    AssessmentQuestion,
     AssessmentQuestionBank,
     CandidateAnswer,
     InterviewForm,
-    InterviewQuestion,
 )
 from .views_schema_ import (
     AssessmentExtractor,
@@ -243,7 +241,7 @@ def ensure_unique_key(base_key: str, used_keys: set[str]) -> str:
 
 
 def summarize_question_intents(
-    interview: InterviewForm, questions: list[InterviewQuestion]
+    interview: InterviewForm, questions: list[dict[str, Any]]
 ) -> dict[str, dict[str, str]]:
     """Use the LLM-driven summarizer with lightweight caching."""
     cache_key = str(interview.id)
@@ -254,15 +252,18 @@ def summarize_question_intents(
         return cached["data"]
 
     summarizer = QuestionIntentSummarizer()
-    payload = [
-        {
-            "id": str(question.id),
-            "question": question.question_text.strip(),
-            "sequence": question.sequence_number,
-        }
-        for question in questions
-        if question.question_text and question.question_text.strip()
-    ]
+    payload = []
+    for question in questions:
+        text = (question.get("text") or "").strip()
+        if not text:
+            continue
+        payload.append(
+            {
+                "id": str(question.get("id")),
+                "question": text,
+                "sequence": question.get("sequence_number"),
+            }
+        )
 
     summaries = summarizer.summarize(payload)
     QUESTION_INTENT_CACHE[cache_key] = {"token": freshness_token, "data": summaries}
@@ -302,22 +303,24 @@ def normalize_question_list(source: list[Any] | None) -> list[str]:
 
 
 def build_question_field(
-    question: InterviewQuestion, metadata: dict[str, Any], used_keys: set[str]
+    question: dict[str, Any], metadata: dict[str, Any], used_keys: set[str]
 ) -> dict[str, Any]:
     """Create a verification field descriptor for a specific interview question."""
-    label = normalize_field_label(question.question_text, metadata.get("label"))
-    description = metadata.get("summary") or question.question_text.strip()
+    question_text = (question.get("text") or "").strip()
+    label = normalize_field_label(question_text, metadata.get("label"))
+    description = metadata.get("summary") or question_text
     raw_key = metadata.get("key") or label
-    slug = slugify_field_key(raw_key, fallback=f"question_{question.sequence_number}")
+    fallback_key = f"question_{question.get('sequence_number')}"
+    slug = slugify_field_key(raw_key, fallback=fallback_key)
     key = ensure_unique_key(slug, used_keys)
     return {
         "key": key,
         "label": label,
         "placeholder": "Confirm the candidate's answer",
         "description": description,
-        "sequence_number": question.sequence_number,
-        "question_id": str(question.id),
-        "helper_text": question.question_text.strip(),
+        "sequence_number": question.get("sequence_number"),
+        "question_id": str(question.get("id")),
+        "helper_text": question_text,
         "required": True,
         "type": "textarea",
         "input_type": "text",
@@ -337,7 +340,7 @@ def build_verification_fields(interview: InterviewForm | None) -> list[dict[str,
     used_keys = {field["key"] for field in fields}
 
     for question in ordered_questions:
-        metadata = question_summaries.get(str(question.id), {})
+        metadata = question_summaries.get(str(question.get("id")), {})
         fields.append(build_question_field(question, metadata, used_keys))
 
     return fields
@@ -380,11 +383,7 @@ def build_session_payload(request) -> dict:
 
     if interview_id:
         logger.info(f"[SESSION] Requested interview_id={interview_id}")
-        interview = (
-            InterviewForm.objects.prefetch_related("questions")
-            .filter(id=interview_id)
-            .first()
-        )
+        interview = InterviewForm.objects.filter(id=interview_id).first()
         if interview:
             verification_fields, extraction_keys = get_verification_schema(interview)
             interview_questions = interview.question_texts()
@@ -542,10 +541,10 @@ def build_role_fallback_questions(role: str, count: int = TARGET_ASSESSMENT_QUES
 
 def interview_builder(request):
     """Render interview creation and listing page."""
-    interviews_queryset = InterviewForm.objects.prefetch_related("questions").order_by(
-        "-updated_at"
-    )
+    interviews_queryset = InterviewForm.objects.order_by("-updated_at")
     interviews = list(interviews_queryset)
+    for interview in interviews:
+        interview.question_rows = interview.get_question_entries()
     print(f"[INTERVIEW_BUILDER] Loaded {len(interviews)} interviews")
 
     return render(
@@ -563,13 +562,11 @@ def voice_page(request, interview_id: str | None = None):
     if not interview_id:
         return redirect("interview_builder")
 
-    interview = get_object_or_fail(
-        InterviewForm.objects.prefetch_related("questions"), id=interview_id
-    )
+    interview = get_object_or_fail(InterviewForm, id=interview_id)
 
     questions = [
-        {"number": idx, "text": text}
-        for idx, text in enumerate(interview.question_texts(), start=1)
+        {"number": entry["sequence_number"], "text": entry["text"]}
+        for entry in interview.ordered_questions()
     ]
 
     verification_fields, _ = get_verification_schema(interview)
@@ -594,14 +591,14 @@ def view_responses(request):
         VoiceConversation.objects.filter(extracted_info__isnull=False)
         .exclude(extracted_info={})
         .select_related("interview_form")
-        .prefetch_related(
-            "assessments", "assessments__questions", "assessments__questions__answer"
-        )
+        .prefetch_related("assessments", "assessments__answer_sheet")
     )
 
     conversations = list(conversations_queryset)
     for conversation in conversations:
         conversation.display_fields = build_display_fields(conversation)
+        for assessment in conversation.assessments.all():
+            assessment.qa_preview = assessment.get_qa_pairs()
 
     return render(request, "form_ai/responses.html", {"conversations": conversations})
 
@@ -623,14 +620,17 @@ def conduct_assessment(request, token: str):
 
     assessment = get_object_or_fail(
         TechnicalAssessment.objects.select_related(
-            "conversation", "interview_form", "conversation__interview_form"
-        ).prefetch_related("questions"),
+            "conversation",
+            "interview_form",
+            "conversation__interview_form",
+            "answer_sheet",
+        ),
         id=assessment_id,
     )
 
     questions_list = [
-        {"number": q.sequence_number, "text": q.question_text}
-        for q in assessment.questions.all()
+        {"number": entry["sequence_number"], "text": entry["text"]}
+        for entry in assessment.get_question_entries()
     ]
 
     interview = assessment.interview_form or assessment.conversation.interview_form
@@ -698,16 +698,8 @@ def create_interview(request):
         ai_prompt=(body.get("ai_prompt") or "").strip(),
     )
 
-    InterviewQuestion.objects.bulk_create(
-        [
-            InterviewQuestion(
-                form=interview,
-                sequence_number=index,
-                question_payload=InterviewQuestion.build_payload(text),
-            )
-            for index, text in enumerate(cleaned_questions, start=1)
-        ]
-    )
+    interview.append_questions(cleaned_questions)
+    interview.save(update_fields=["question_schema", "updated_at"])
 
     redirect_path = reverse("voice_page", args=[interview.id])
     redirect_url = request.build_absolute_uri(redirect_path)
@@ -732,11 +724,9 @@ def create_interview(request):
 @transaction.atomic
 def delete_interview(request, interview_id: str):
     """Delete an entire interview form and its questions."""
-    interview = get_object_or_fail(
-        InterviewForm.objects.prefetch_related("questions"), id=interview_id
-    )
+    interview = get_object_or_fail(InterviewForm, id=interview_id)
 
-    question_count = interview.questions.count()
+    question_count = len(interview.get_question_entries())
     title = interview.title
     interview.delete()
 
@@ -763,36 +753,35 @@ def delete_interview(request, interview_id: str):
 @require_http_methods(["DELETE"])
 @handle_view_errors("Failed to delete interview question")
 @transaction.atomic
-def delete_interview_question(request, question_id: int):
+def delete_interview_question(request, interview_id: str, question_id: str):
     """Delete a single interview question and resequence the remainder."""
-    question = get_object_or_fail(
-        InterviewQuestion.objects.select_related("form"), id=question_id
-    )
-    form = question.form
+    form = get_object_or_fail(InterviewForm, id=interview_id)
 
-    if form.questions.count() <= 1:
+    questions = form.get_question_entries()
+    if len(questions) <= 1:
         raise AppError(
             "At least one question is required per interview. Add another question before deleting this one.",
             status=400,
         )
 
-    print(
-        f"[DELETE_QUESTION] Removing Q{question.sequence_number} "
-        f"from interview {form.id}"
-    )
-    question.delete()
+    if not form.remove_question(question_id):
+        raise AppError("Question not found on this interview", status=404)
 
-    # Resequence remaining questions for consistent ordering
-    remaining = form.questions.order_by("sequence_number", "id")
-    for idx, item in enumerate(remaining, start=1):
-        if item.sequence_number != idx:
-            InterviewQuestion.objects.filter(id=item.id).update(sequence_number=idx)
+    form.save(update_fields=["question_schema", "updated_at"])
+    remaining = form.get_question_entries()
+
+    logger.info(
+        "[INTERVIEW] Deleted question %s from interview %s (remaining=%d)",
+        question_id,
+        interview_id,
+        len(remaining),
+    )
 
     return json_ok(
         {
             "interview_id": str(form.id),
             "question_id": question_id,
-            "remaining_questions": remaining.count(),
+            "remaining_questions": len(remaining),
         }
     )
 
@@ -968,24 +957,12 @@ def generate_assessment(request, conv_id: int):
             status=500,
         )
 
-    # Create assessment with qa_snapshot
     assessment = TechnicalAssessment.objects.create(
         conversation=conversation,
         interview_form=interview_form,
-        qa_snapshot=questions_list,
     )
-
-    # Bulk create questions
-    AssessmentQuestion.objects.bulk_create(
-        [
-            AssessmentQuestion(
-                assessment=assessment,
-                sequence_number=idx,
-                question_payload=AssessmentQuestion.build_payload(text),
-            )
-            for idx, text in enumerate(questions_list, start=1)
-        ]
-    )
+    assessment.append_questions(questions_list)
+    assessment.save(update_fields=["question_schema", "updated_at"])
     logger.info(
         "[GENERATE] Assessment %s created with %d role-based questions for role '%s'",
         assessment.id,
@@ -1040,11 +1017,16 @@ def save_assessment(request, assessment_id: str):
 def analyze_assessment(request, assessment_id: str):
     """Analyze assessment responses and save answers."""
     assessment = get_object_or_fail(
-        TechnicalAssessment.objects.prefetch_related("questions"), id=assessment_id
+        TechnicalAssessment.objects.select_related("answer_sheet"), id=assessment_id
     )
     body = safe_json_parse(request.body)
 
-    logger.info("[ASSESSMENT:ANALYZE] assessment=%s questions=%d", assessment_id, assessment.questions.count())
+    question_entries = assessment.get_question_entries()
+    logger.info(
+        "[ASSESSMENT:ANALYZE] assessment=%s questions=%d",
+        assessment_id,
+        len(question_entries),
+    )
 
     qa_mapping = body.get("qa_mapping")
 
@@ -1061,19 +1043,30 @@ def analyze_assessment(request, assessment_id: str):
             transcript_len,
         )
         extractor = AssessmentExtractor()
-        questions_text = [q.question_text for q in assessment.questions.all()]
+        questions_text = [entry["text"] for entry in question_entries]
         answers_dict = extractor.extract_answers(assessment.transcript, questions_text)
 
     # Save answers
-    saved_answers = {}
-    for question in assessment.questions.all():
-        answer_key = f"q{question.sequence_number}"
-        answer_text = answers_dict.get(answer_key, "")
+    saved_answers: dict[str, str] = {}
+    answer_sheet, _ = CandidateAnswer.objects.get_or_create(assessment=assessment)
+    answers_map = dict(answer_sheet.answers or {})
 
-        CandidateAnswer.create_or_update(question, answer_text)
-        saved_answers[answer_key] = answer_text if answer_text else "NIL"
+    for entry in question_entries:
+        seq_key = f"q{entry['sequence_number']}"
+        question_id = entry["id"]
+        answer_text = (
+            answers_dict.get(seq_key)
+            or answers_dict.get(question_id)
+            or ""
+        )
+        normalized = (answer_text or "").strip() or "NIL"
+        answers_map[question_id] = normalized
+        answers_map[seq_key] = normalized
+        saved_answers[seq_key] = normalized
+        logger.info("[ASSESSMENT:ANALYZE] Saved answer for %s", seq_key)
 
-        logger.info(f"[ANALYZE] Saved answer for Q{question.sequence_number}")
+    answer_sheet.answers = answers_map
+    answer_sheet.save(update_fields=["answers", "updated_at"])
 
     # Mark assessment as completed
     assessment.is_completed = True
@@ -1104,7 +1097,7 @@ def view_response(request, conv_id: int):
     """View full response details for a conversation."""
     conversation = get_object_or_fail(
         VoiceConversation.objects.select_related("interview_form").prefetch_related(
-            "assessments", "assessments__questions", "assessments__questions__answer"
+            "assessments", "assessments__answer_sheet"
         ),
         id=conv_id,
     )
@@ -1115,28 +1108,21 @@ def view_response(request, conv_id: int):
 
     assessments_data = []
     for assessment in conversation.assessments.all():
+        answers = (assessment.answer_sheet.answers if hasattr(assessment, "answer_sheet") else {}) or {}
         qa_pairs = []
-        for question in assessment.questions.all():
-            answer_text = "NIL"
-            answered_at = None
-
-            try:
-                if hasattr(question, "answer") and question.answer:
-                    answer_text = question.answer.response_text or "NIL"
-                    answered_at = (
-                        question.answer.created_at.isoformat()
-                        if question.answer.created_at
-                        else None
-                    )
-            except CandidateAnswer.DoesNotExist:
-                pass
-
+        for question in assessment.get_question_entries():
+            question_id = question["id"]
+            sequence_key = f"q{question['sequence_number']}"
+            answer_text = (
+                answers.get(question_id)
+                or answers.get(sequence_key)
+                or "NIL"
+            )
             qa_pairs.append(
                 {
-                    "number": question.sequence_number,
-                    "question": question.question_text,
+                    "number": question["sequence_number"],
+                    "question": question["text"],
                     "answer": answer_text,
-                    "answered_at": answered_at,
                 }
             )
 

@@ -1,13 +1,59 @@
 # models.py
 
 import uuid
+from typing import Any
 
 from django.db import models
 from django.utils import timezone
 
 
+def build_question_entry(
+    text: str,
+    *,
+    sequence: int | None = None,
+    question_type: str = "text",
+    metadata: dict | None = None,
+    options: list | None = None,
+    question_id: str | None = None,
+) -> dict:
+    """Create a normalized question entry stored inside JSON blobs."""
+    return {
+        "id": question_id or str(uuid.uuid4()),
+        "sequence_number": sequence,
+        "text": (text or "").strip(),
+        "type": question_type or "text",
+        "metadata": metadata or {},
+        "options": options or [],
+    }
+
+
+def normalize_question_entries(entries: list[dict] | None) -> list[dict]:
+    """Ensure every question entry has expected keys."""
+    normalized: list[dict] = []
+    if not isinstance(entries, list):
+        entries = []
+
+    for idx, entry in enumerate(entries, start=1):
+        if isinstance(entry, str):
+            entry = {"text": entry}
+        elif not isinstance(entry, dict):
+            entry = {"text": str(entry)}
+        entry = entry or {}
+        normalized.append(
+            {
+                "id": entry.get("id") or str(uuid.uuid4()),
+                "sequence_number": entry.get("sequence_number") or idx,
+                "text": (entry.get("text") or entry.get("question") or "").strip(),
+                "type": entry.get("type") or entry.get("question_type") or "text",
+                "metadata": entry.get("metadata") or {},
+                "options": entry.get("options") or [],
+            }
+        )
+    return normalized
+
+
 def default_question_payload():
-    """Return a normalized question payload skeleton."""
+    """Backward-compatible payload builder referenced by historical migrations."""
     return {
         "text": "",
         "type": "text",
@@ -16,96 +62,64 @@ def default_question_payload():
     }
 
 
-class QuestionDefinitionMixin(models.Model):
-    """
-    Shared helpers for models that store question definitions as JSON payloads.
+class QuestionListMixin(models.Model):
+    """Abstract helper that stores ordered question definitions inline as JSON."""
 
-    The JSON structure remains lightweight but consistent:
-    {
-        "text": "Question?",
-        "type": "text",
-        "metadata": {...},
-        "options": [...]
-    }
-    """
-
-    question_payload = models.JSONField(
-        default=default_question_payload,
+    question_schema = models.JSONField(
+        default=list,
         blank=True,
-        help_text="Normalized question definition stored as JSON (text/type/metadata/options)",
+        help_text="Ordered question definitions stored inline (JSON list of {id, sequence_number, text, type, metadata, options})",
     )
 
     class Meta:
         abstract = True
 
-    def _normalized_payload(self):
-        payload = default_question_payload()
-        existing = self.question_payload or {}
-        if isinstance(existing, dict):
-            payload.update(existing)
-        else:
-            payload["text"] = str(existing)
-        if not isinstance(payload.get("metadata"), dict):
-            payload["metadata"] = {}
-        if not isinstance(payload.get("options"), list):
-            payload["options"] = []
-        payload["text"] = payload.get("text") or ""
-        if not isinstance(payload["text"], str):
-            payload["text"] = str(payload["text"])
-        return payload
+    def get_question_entries(self) -> list[dict]:
+        """Return normalized question dictionaries with enforced ordering."""
+        entries = normalize_question_entries(self.question_schema)
+        for idx, entry in enumerate(entries, start=1):
+            entry["sequence_number"] = idx
+        return entries
 
-    @property
-    def question_text(self):
-        """Expose question text for legacy integrations and rendering."""
-        payload = self._normalized_payload()
-        return payload.get("text", "").strip()
+    def set_question_entries(self, entries: list[dict]) -> None:
+        """Persist normalized question entries."""
+        normalized = normalize_question_entries(entries)
+        for idx, entry in enumerate(normalized, start=1):
+            entry["sequence_number"] = idx
+        self.question_schema = normalized
 
-    @question_text.setter
-    def question_text(self, value):
-        payload = self._normalized_payload()
-        payload["text"] = (value or "").strip()
-        self.question_payload = payload
+    def question_texts(self) -> list[str]:
+        """Return ordered question text list."""
+        return [entry.get("text", "") for entry in self.get_question_entries()]
 
-    def as_question_payload(self):
-        """Return the safe payload for downstream consumers."""
-        return self._normalized_payload()
+    def append_questions(self, texts: list[str]) -> None:
+        """Extend the schema with plain text questions."""
+        current = self.get_question_entries()
+        next_index = len(current) + 1
+        for text in texts:
+            if not text or not str(text).strip():
+                continue
+            current.append(build_question_entry(str(text).strip(), sequence=next_index))
+            next_index += 1
+        self.question_schema = current
 
-    def update_question_payload(
-        self,
-        text=None,
-        question_type=None,
-        metadata=None,
-        options=None,
-    ):
-        payload = self._normalized_payload()
-        if text is not None:
-            payload["text"] = text.strip() if isinstance(text, str) else text
-        if question_type is not None:
-            payload["type"] = question_type
-        if metadata is not None:
-            payload["metadata"] = metadata
-        if options is not None:
-            payload["options"] = options
-        self.question_payload = payload
-
-    @classmethod
-    def build_payload(cls, text, question_type="text", metadata=None, options=None):
-        payload = default_question_payload()
-        payload["text"] = (text or "").strip()
-        payload["type"] = question_type or "text"
-        if metadata is not None:
-            payload["metadata"] = metadata
-        if options is not None:
-            payload["options"] = options
-        return payload
+    def remove_question(self, question_id: str) -> bool:
+        """Drop a question by its identifier."""
+        current = self.get_question_entries()
+        filtered = [entry for entry in current if entry["id"] != str(question_id)]
+        if len(filtered) == len(current):
+            return False
+        for idx, entry in enumerate(filtered, start=1):
+            entry["sequence_number"] = idx
+        self.question_schema = filtered
+        return True
 
 
-class InterviewForm(models.Model):
+class InterviewForm(QuestionListMixin, models.Model):
     """
     Interview template with ordered questions stored in the database.
 
     Relationships:
-        - One InterviewForm -> Many InterviewQuestion
         - One InterviewForm -> Many VoiceConversation
         - One InterviewForm -> Many TechnicalAssessment
     """
@@ -138,38 +152,13 @@ class InterviewForm(models.Model):
     def __str__(self):
         return self.title
 
-    def ordered_questions(self):
-        """Return queryset ordered by sequence number."""
-        return self.questions.order_by("sequence_number")
+    def ordered_questions(self) -> list[dict]:
+        """Return ordered JSON question entries."""
+        return self.get_question_entries()
 
-    def question_texts(self):
+    def question_texts(self) -> list[str]:
         """Return list of question strings."""
-        return [question.question_text for question in self.ordered_questions()]
-
-
-class InterviewQuestion(QuestionDefinitionMixin):
-    """Stores an individual interview question."""
-
-    form = models.ForeignKey(
-        InterviewForm,
-        on_delete=models.CASCADE,
-        related_name="questions",
-        help_text="Parent interview definition",
-    )
-    sequence_number = models.PositiveIntegerField(
-        help_text="Display order (1, 2, 3, ...)"
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = "interview_questions"
-        ordering = ["sequence_number"]
-        unique_together = ["form", "sequence_number"]
-        verbose_name = "Interview Question"
-        verbose_name_plural = "Interview Questions"
-
-    def __str__(self):
-        return f"{self.form.title} / Q{self.sequence_number}"
+        return super().question_texts()
 
 
 class VoiceConversation(models.Model):
@@ -230,16 +219,17 @@ class VoiceConversation(models.Model):
         return self.extracted_info.get("experience", "")
 
 
-class TechnicalAssessment(models.Model):
+class TechnicalAssessment(QuestionListMixin, models.Model):
     """
     Technical assessment session for a candidate.
 
     Relationships:
         - Many TechnicalAssessments → One VoiceConversation
-        - One TechnicalAssessment → Many AssessmentQuestions
+        - One TechnicalAssessment → One CandidateAnswer sheet
 
     JSONB Fields:
         - transcript: Assessment conversation history
+        - question_schema: Ordered technical question definitions
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -260,9 +250,6 @@ class TechnicalAssessment(models.Model):
     transcript = models.JSONField(
         default=list, help_text="Assessment conversation transcript"
     )
-    qa_snapshot = models.JSONField(
-        default=list, blank=True, help_text="Snapshot of questions and answers"
-    )
     is_completed = models.BooleanField(
         default=False, db_index=True, help_text="Whether assessment is finished"
     )
@@ -282,16 +269,17 @@ class TechnicalAssessment(models.Model):
     @property
     def total_questions(self):
         """Total number of questions."""
-        return self.questions.count()
+        return len(self.get_question_entries())
 
     @property
     def answered_count(self):
         """Count of answered questions."""
-        return (
-            self.questions.filter(answer__isnull=False)
-            .exclude(answer__response_text="NIL")
-            .exclude(answer__response_text="")
-            .count()
+        if not hasattr(self, "answer_sheet"):
+            return 0
+        return sum(
+            1
+            for value in (self.answer_sheet.answers or {}).values()
+            if isinstance(value, str) and value.strip() and value.strip().upper() != "NIL"
         )
 
     @property
@@ -302,144 +290,122 @@ class TechnicalAssessment(models.Model):
 
     def get_qa_pairs(self):
         """Get all question-answer pairs for display."""
-        pairs = []
-        for question in self.questions.select_related("answer").all():
-            pairs.append(
-                {
-                    "number": question.sequence_number,
-                    "question": question.question_text,
-                    "answer": (
-                        question.answer.response_text
-                        if hasattr(question, "answer")
-                        else "NIL"
-                    ),
-                    "answered_at": (
-                        question.answer.created_at
-                        if hasattr(question, "answer")
-                        else None
-                    ),
-                }
-            )
-        return pairs
-
-
-class AssessmentQuestion(QuestionDefinitionMixin):
-    """
-    Individual question in a technical assessment.
-
-    Relationships:
-        - Many AssessmentQuestions → One TechnicalAssessment
-        - One AssessmentQuestion → One CandidateAnswer (optional)
-    """
-
-    assessment = models.ForeignKey(
-        TechnicalAssessment,
-        on_delete=models.CASCADE,
-        related_name="questions",
-        help_text="Parent assessment",
-    )
-    sequence_number = models.PositiveIntegerField(
-        help_text="Question order (1, 2, 3...)"
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = "assessment_questions"
-        ordering = ["sequence_number"]
-        unique_together = ["assessment", "sequence_number"]
-        verbose_name = "Assessment Question"
-        verbose_name_plural = "Assessment Questions"
-
-    def __str__(self):
-        return f"Q{self.sequence_number}: {self.question_text[:50]}..."
-
-    @property
-    def is_answered(self):
-        """Check if this question has been answered."""
-        return hasattr(self, "answer") and self.answer.is_valid
+        answers = (self.answer_sheet.answers if hasattr(self, "answer_sheet") else {}) or {}
+        entries = []
+        for question in self.get_question_entries():
+            entry = {
+                "number": question["sequence_number"],
+                "question": question["text"],
+                "answer": answers.get(question["id"]) or answers.get(str(question["sequence_number"])) or "NIL",
+            }
+            entries.append(entry)
+        return entries
 
 
 class CandidateAnswer(models.Model):
     """
-    Candidate's answer to an assessment question.
+    Candidate's answers stored per assessment as a JSON mapping.
 
     Relationships:
-        - One CandidateAnswer → One AssessmentQuestion (OneToOne)
+        - One CandidateAnswer → One TechnicalAssessment (OneToOne)
     """
 
-    question = models.OneToOneField(
-        AssessmentQuestion,
+    assessment = models.OneToOneField(
+        TechnicalAssessment,
         on_delete=models.CASCADE,
-        related_name="answer",
-        help_text="The question being answered",
+        related_name="answer_sheet",
+        help_text="Parent technical assessment",
+        null=True,
+        blank=True,
     )
-    response_text = models.TextField(
-        default="NIL", blank=True, help_text="Candidate's response"
+    answers = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Question ID/sequence mapped to normalized answer text",
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "candidate_answers"
-        verbose_name = "Candidate Answer"
-        verbose_name_plural = "Candidate Answers"
+        verbose_name = "Candidate Answer Sheet"
+        verbose_name_plural = "Candidate Answer Sheets"
 
     def __str__(self):
-        return f"Answer to Q{self.question.sequence_number}"
+        return f"Answers for assessment {self.assessment_id}"
 
-    @property
-    def is_valid(self):
-        """Check if answer has meaningful content."""
-        return bool(
-            self.response_text
-            and self.response_text.strip()
-            and self.response_text.strip() != "NIL"
+    def record_answer(self, question_id: str, text: str | None):
+        """Insert/update an answer keyed by question identifier."""
+        answers = dict(self.answers or {})
+        normalized_key = str(question_id)
+        normalized_text = (text or "").strip() or "NIL"
+        answers[normalized_key] = normalized_text
+        self.answers = answers
+        self.save(update_fields=["answers", "updated_at"])
+
+    def get_answer(self, question_id: str, default: str = "NIL") -> str:
+        answers = self.answers or {}
+        return answers.get(str(question_id), default)
+
+    def answered_count(self) -> int:
+        answers = self.answers or {}
+        return sum(
+            1
+            for value in answers.values()
+            if isinstance(value, str)
+            and value.strip()
+            and value.strip().upper() != "NIL"
         )
 
-    @classmethod
-    def create_or_update(cls, question, text):
-        """Create or update answer for a question."""
-        answer_text = text.strip() if text and text.strip() else "NIL"
-        answer, created = cls.objects.update_or_create(
-            question=question, defaults={"response_text": answer_text}
-        )
-        return answer, created
 
-
-class AssessmentQuestionBank(QuestionDefinitionMixin):
+class AssessmentQuestionBank(models.Model):
     """
     Bank of technical questions for assessments, organized by role.
 
-    Relationships:
-        - Many AssessmentQuestionBank → One InterviewForm (optional)
     """
 
     role = models.CharField(
         max_length=255,
-        db_index=True,
+        unique=True,
         help_text="Role or position (e.g., Python Intern, Backend Developer)",
     )
-    sequence_number = models.PositiveIntegerField(
-        help_text="Question order (1, 2, 3...)"
+    questions = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Ordered question payloads maintained inline",
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "assessment_question_bank"
-        ordering = ["role", "sequence_number"]
-        unique_together = ["role", "sequence_number"]
+        ordering = ["role"]
         verbose_name = "Assessment Question Bank"
         verbose_name_plural = "Assessment Question Bank"
 
     def __str__(self):
-        return f"{self.role} / Q{self.sequence_number}"
+        return f"{self.role} / {len(self.questions or [])} questions"
 
     @classmethod
     def get_questions_for_role(cls, role: str) -> list:
         """Retrieve all questions for a given role."""
         if not role or not role.strip():
             return []
-        queryset = cls.objects.filter(role__iexact=role.strip()).order_by(
-            "sequence_number"
+        bank = (
+            cls.objects.filter(role__iexact=role.strip())
+            .only("questions")
+            .first()
         )
-        return [question.question_text for question in queryset]
+        if not bank or not isinstance(bank.questions, list):
+            return []
+        entries = []
+        for item in bank.questions:
+            if isinstance(item, str):
+                text = item.strip()
+            elif isinstance(item, dict):
+                text = (item.get("text") or item.get("question") or "").strip()
+            else:
+                text = str(item).strip()
+            if text:
+                entries.append(text)
+        return entries

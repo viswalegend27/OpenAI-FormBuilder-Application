@@ -44,23 +44,19 @@ class Command(BaseCommand):
         existing_count = 0
 
         for role, questions in ASSESSMENT_QUESTIONS.items():
-            for seq_num, question_text in enumerate(questions, start=1):
-                obj, created = AssessmentQuestionBank.objects.get_or_create(
-                    role=role,
-                    sequence_number=seq_num,
-                    defaults={
-                        "question_payload": AssessmentQuestionBank.build_payload(
-                            question_text
-                        )
-                    },
+            bank, created = AssessmentQuestionBank.objects.get_or_create(
+                role=role, defaults={"questions": []}
+            )
+            cleaned = [question.strip() for question in questions if question.strip()]
+            bank.questions = cleaned
+            bank.save(update_fields=["questions", "updated_at"])
+            if created:
+                created_count += 1
+                self.stdout.write(
+                    self.style.SUCCESS(f"✓ Created question bank for {role}")
                 )
-                if created:
-                    created_count += 1
-                    self.stdout.write(
-                        self.style.SUCCESS(f"✓ Created: {role} Q{seq_num}")
-                    )
-                else:
-                    existing_count += 1
+            else:
+                existing_count += 1
 
         self.stdout.write(
             self.style.SUCCESS(

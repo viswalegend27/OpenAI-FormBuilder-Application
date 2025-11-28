@@ -20,7 +20,7 @@ urlpatterns = [
         name="delete_interview",
     ),
     path(
-        "api/interviews/questions/<int:question_id>/",
+        "api/interviews/<uuid:interview_id>/questions/<str:question_id>/",
         views.delete_interview_question,
         name="delete_interview_question",
     ),

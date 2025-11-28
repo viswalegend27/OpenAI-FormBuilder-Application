@@ -194,19 +194,20 @@ class ExistingInterviewManager {
 
     async handleDeleteQuestion(button) {
         const questionId = button.dataset.questionId;
-        if (!questionId) return;
+        const card = button.closest(".interview-card");
+        const interviewId = card?.dataset?.interviewId;
+        if (!questionId || !interviewId) return;
         if (!window.confirm("Delete this question from the interview?")) return;
 
         const questionItem = button.closest(".question-item");
-        const card = button.closest(".interview-card");
 
         button.disabled = true;
         const originalLabel = button.textContent;
-        button.textContent = "…";
+        button.textContent = "...";
 
         try {
             const response = await fetch(
-                `/api/interviews/questions/${questionId}/`,
+                `/api/interviews/${interviewId}/questions/${questionId}/`,
                 { method: "DELETE" }
             );
             const data = await response.json().catch(() => ({}));
