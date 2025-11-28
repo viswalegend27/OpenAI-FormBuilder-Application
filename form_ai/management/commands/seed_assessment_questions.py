@@ -48,7 +48,11 @@ class Command(BaseCommand):
                 obj, created = AssessmentQuestionBank.objects.get_or_create(
                     role=role,
                     sequence_number=seq_num,
-                    defaults={"question_text": question_text},
+                    defaults={
+                        "question_payload": AssessmentQuestionBank.build_payload(
+                            question_text
+                        )
+                    },
                 )
                 if created:
                     created_count += 1

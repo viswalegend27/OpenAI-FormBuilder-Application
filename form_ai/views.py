@@ -666,7 +666,7 @@ def create_interview(request):
             InterviewQuestion(
                 form=interview,
                 sequence_number=index,
-                question_text=text,
+                question_payload=InterviewQuestion.build_payload(text),
             )
             for index, text in enumerate(cleaned_questions, start=1)
         ]
@@ -942,7 +942,9 @@ def generate_assessment(request, conv_id: int):
     AssessmentQuestion.objects.bulk_create(
         [
             AssessmentQuestion(
-                assessment=assessment, sequence_number=idx, question_text=text
+                assessment=assessment,
+                sequence_number=idx,
+                question_payload=AssessmentQuestion.build_payload(text),
             )
             for idx, text in enumerate(questions_list, start=1)
         ]

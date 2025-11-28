@@ -6,6 +6,100 @@ from django.db import models
 from django.utils import timezone
 
 
+def default_question_payload():
+    """Return a normalized question payload skeleton."""
+    return {
+        "text": "",
+        "type": "text",
+        "metadata": {},
+        "options": [],
+    }
+
+
+class QuestionDefinitionMixin(models.Model):
+    """
+    Shared helpers for models that store question definitions as JSON payloads.
+
+    The JSON structure remains lightweight but consistent:
+    {
+        "text": "Question?",
+        "type": "text",
+        "metadata": {...},
+        "options": [...]
+    }
+    """
+
+    question_payload = models.JSONField(
+        default=default_question_payload,
+        blank=True,
+        help_text="Normalized question definition stored as JSON (text/type/metadata/options)",
+    )
+
+    class Meta:
+        abstract = True
+
+    def _normalized_payload(self):
+        payload = default_question_payload()
+        existing = self.question_payload or {}
+        if isinstance(existing, dict):
+            payload.update(existing)
+        else:
+            payload["text"] = str(existing)
+        if not isinstance(payload.get("metadata"), dict):
+            payload["metadata"] = {}
+        if not isinstance(payload.get("options"), list):
+            payload["options"] = []
+        payload["text"] = payload.get("text") or ""
+        if not isinstance(payload["text"], str):
+            payload["text"] = str(payload["text"])
+        return payload
+
+    @property
+    def question_text(self):
+        """Expose question text for legacy integrations and rendering."""
+        payload = self._normalized_payload()
+        return payload.get("text", "").strip()
+
+    @question_text.setter
+    def question_text(self, value):
+        payload = self._normalized_payload()
+        payload["text"] = (value or "").strip()
+        self.question_payload = payload
+
+    def as_question_payload(self):
+        """Return the safe payload for downstream consumers."""
+        return self._normalized_payload()
+
+    def update_question_payload(
+        self,
+        text=None,
+        question_type=None,
+        metadata=None,
+        options=None,
+    ):
+        payload = self._normalized_payload()
+        if text is not None:
+            payload["text"] = text.strip() if isinstance(text, str) else text
+        if question_type is not None:
+            payload["type"] = question_type
+        if metadata is not None:
+            payload["metadata"] = metadata
+        if options is not None:
+            payload["options"] = options
+        self.question_payload = payload
+
+    @classmethod
+    def build_payload(cls, text, question_type="text", metadata=None, options=None):
+        payload = default_question_payload()
+        payload["text"] = (text or "").strip()
+        payload["type"] = question_type or "text"
+        if metadata is not None:
+            payload["metadata"] = metadata
+        if options is not None:
+            payload["options"] = options
+        return payload
+
+
 class InterviewForm(models.Model):
     """
     Interview template with ordered questions stored in the database.
@@ -50,10 +144,10 @@ class InterviewForm(models.Model):
 
     def question_texts(self):
         """Return list of question strings."""
-        return list(self.ordered_questions().values_list("question_text", flat=True))
+        return [question.question_text for question in self.ordered_questions()]
 
 
-class InterviewQuestion(models.Model):
+class InterviewQuestion(QuestionDefinitionMixin):
     """Stores an individual interview question."""
 
     form = models.ForeignKey(
@@ -65,7 +159,6 @@ class InterviewQuestion(models.Model):
     sequence_number = models.PositiveIntegerField(
         help_text="Display order (1, 2, 3, ...)"
     )
-    question_text = models.TextField(help_text="Question content")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -230,7 +323,7 @@ class TechnicalAssessment(models.Model):
         return pairs
 
 
-class AssessmentQuestion(models.Model):
+class AssessmentQuestion(QuestionDefinitionMixin):
     """
     Individual question in a technical assessment.
 
@@ -248,7 +341,6 @@ class AssessmentQuestion(models.Model):
     sequence_number = models.PositiveIntegerField(
         help_text="Question order (1, 2, 3...)"
     )
-    question_text = models.TextField(help_text="The question content")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -314,7 +406,7 @@ class CandidateAnswer(models.Model):
         return answer, created
 
 
-class AssessmentQuestionBank(models.Model):
+class AssessmentQuestionBank(QuestionDefinitionMixin):
     """
     Bank of technical questions for assessments, organized by role.
 
@@ -330,7 +422,6 @@ class AssessmentQuestionBank(models.Model):
     sequence_number = models.PositiveIntegerField(
         help_text="Question order (1, 2, 3...)"
     )
-    question_text = models.TextField(help_text="Technical question content")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -348,8 +439,7 @@ class AssessmentQuestionBank(models.Model):
         """Retrieve all questions for a given role."""
         if not role or not role.strip():
             return []
-        return list(
-            cls.objects.filter(role__iexact=role.strip())
-            .order_by("sequence_number")
-            .values_list("question_text", flat=True)
+        queryset = cls.objects.filter(role__iexact=role.strip()).order_by(
+            "sequence_number"
         )
+        return [question.question_text for question in queryset]
