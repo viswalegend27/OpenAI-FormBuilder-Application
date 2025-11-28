@@ -1,0 +1,308 @@
+:root {
+    --bg: #f0f4f8;
+    --panel-bg: #ffffff;
+    --panel-muted: #f8fafc;
+    --border: #d7dce5;
+    --text: #1b1f27;
+    --muted: #5b6474;
+    --accent: #0f828c;
+    --accent-dark: #0a5c64;
+    --shadow: 0 14px 40px rgba(15, 130, 140, 0.08);
+    --danger: #d9534f;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+}
+
+a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.app-nav {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.1rem clamp(1rem, 4vw, 3rem);
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 6px 20px rgba(15, 130, 140, 0.05);
+}
+
+.brand {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.brand-eyebrow {
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    font-size: 0.68rem;
+    color: var(--muted);
+}
+
+.brand-title {
+    font-weight: 700;
+    font-size: 1.1rem;
+}
+
+.nav-links {
+    display: flex;
+    gap: 0.6rem;
+    align-items: center;
+}
+
+.nav-link {
+    border-radius: 999px;
+    padding: 0.45rem 1.15rem;
+    font-weight: 600;
+    color: var(--muted);
+    border: 1px solid transparent;
+    transition: background 0.2s ease, color 0.2s ease, border 0.2s ease;
+}
+
+.nav-link:hover,
+.nav-link:focus-visible,
+.nav-link.active {
+    background: rgba(15, 130, 140, 0.12);
+    color: var(--accent);
+    border-color: rgba(15, 130, 140, 0.2);
+    outline: none;
+}
+
+.hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2rem;
+    padding: 2.2rem clamp(1rem, 4vw, 3rem) 1.5rem;
+    flex-wrap: wrap;
+}
+
+.eyebrow {
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-size: 0.75rem;
+    margin-bottom: 0.25rem;
+}
+
+.hero h1 {
+    margin: 0;
+    font-size: clamp(2rem, 4vw, 2.6rem);
+}
+
+.subtitle {
+    margin: 0.35rem 0 0;
+    color: var(--muted);
+}
+
+.hero-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(110px, 1fr));
+    gap: 1rem;
+    padding: 1.25rem;
+    border-radius: 18px;
+    border: 1px solid var(--border);
+    background: var(--panel-bg);
+    box-shadow: var(--shadow);
+    min-width: 220px;
+}
+
+.meta-label {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.meta-value {
+    margin: 0.25rem 0 0;
+    font-size: 1.3rem;
+    font-weight: 700;
+}
+
+.layout {
+    --layout-columns: 1fr;
+    --layout-gap: 1.75rem;
+    display: grid;
+    grid-template-columns: var(--layout-columns);
+    gap: var(--layout-gap);
+    padding: 0 clamp(1rem, 4vw, 3rem) 3rem;
+}
+
+.layout-two {
+    --layout-columns: minmax(280px, 3fr) minmax(320px, 2fr);
+}
+
+.layout-single {
+    --layout-columns: 1fr;
+}
+
+.layout-centered {
+    justify-content: center;
+    --layout-columns: minmax(280px, 1fr);
+}
+
+.panel {
+    background: var(--panel-bg);
+    border-radius: 18px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    padding: clamp(1.5rem, 4vw, 2rem);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.panel-header h2 {
+    margin: 0;
+    font-size: 1.25rem;
+}
+
+.control-btn {
+    border-radius: 10px;
+    border: 1px solid transparent;
+    padding: 0.65rem 1.4rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: #fff;
+    color: var(--accent);
+    transition: background 0.2s ease, color 0.2s ease, border 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+}
+
+.control-btn.primary {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+    box-shadow: 0 8px 16px rgba(15, 130, 140, 0.2);
+}
+
+.control-btn.secondary {
+    background: var(--panel-muted);
+    color: var(--accent);
+}
+
+.control-btn.danger {
+    background: rgba(217, 83, 79, 0.12);
+    color: var(--danger);
+    border-color: rgba(217, 83, 79, 0.3);
+}
+
+.control-btn:not(.secondary):not(.danger):not(.ghost):hover:not(:disabled),
+.control-btn:not(.secondary):not(.danger):not(.ghost):focus-visible:not(:disabled) {
+    background: var(--accent-dark);
+    color: #fff;
+    border-color: var(--accent-dark);
+    outline: none;
+}
+
+.control-btn.danger:hover:not(:disabled),
+.control-btn.danger:focus-visible:not(:disabled) {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: #fff;
+}
+
+.control-btn.ghost {
+    background: transparent;
+    border-color: var(--border);
+    color: var(--muted);
+}
+
+.control-btn.ghost:hover:not(:disabled),
+.control-btn.ghost:focus-visible:not(:disabled) {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: rgba(15, 130, 140, 0.06);
+}
+
+.control-btn.danger.ghost {
+    border-color: rgba(217, 83, 79, 0.4);
+    color: var(--danger);
+}
+
+.control-btn.danger.ghost:hover:not(:disabled),
+.control-btn.danger.ghost:focus-visible:not(:disabled) {
+    background: rgba(217, 83, 79, 0.12);
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+.muted-text {
+    color: var(--muted);
+    font-size: 0.95rem;
+}
+
+.pill {
+    border-radius: 999px;
+    background: rgba(15, 130, 140, 0.12);
+    color: var(--accent);
+    padding: 0.35rem 0.9rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.toast {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%) translateY(150%);
+    background: rgba(0, 0, 0, 0.85);
+    color: #fff;
+    padding: 0.85rem 1.2rem;
+    border-radius: 999px;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+    opacity: 0;
+    z-index: 50;
+}
+
+.toast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+}
+
+@media (max-width: 1100px) {
+    .layout,
+    .layout-two {
+        --layout-columns: 1fr;
+    }
+
+    .hero {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .hero-meta {
+        width: 100%;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    }
+}

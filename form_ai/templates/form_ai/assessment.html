@@ -7,54 +7,75 @@
     <title>Technical Assessment - Form Builder</title>
     {% load static %}
     <link rel="icon" href="{% static 'form_ai/favicon.ico' %}">
+    <link rel="stylesheet" href="{% static 'form_ai/css/app-shell.css' %}">
     <link rel="stylesheet" href="{% static 'form_ai/css/interview.css' %}">
 </head>
 
 <body>
 
-    <header class="header">
+    <nav class="app-nav">
+        <div class="brand">
+            <span class="brand-eyebrow">Voice Assistant</span>
+            <span class="brand-title">Assessment</span>
+        </div>
+        <div class="nav-links">
+            <a href="{% url 'interview_builder' %}#builder" class="nav-link">New Interview</a>
+            <a href="{% url 'view_responses' %}" class="nav-link">Responses</a>
+        </div>
+    </nav>
+
+    <header class="hero">
         <div>
             <p class="eyebrow">Technical Assessment</p>
             <h1>{{ interview_title|default:"Assessment Interview" }}</h1>
-            <p class="subtitle">Candidate: {{ user_info.name|default:"Candidate" }}</p>
+            <p class="subtitle">
+                Candidate: {{ user_info.name|default:"Candidate" }} &middot;
+                {{ user_info.qualification|default:"Qualification pending" }}
+            </p>
+        </div>
+        <div class="hero-meta">
+            <div>
+                <p class="meta-label">Assessment ID</p>
+                <p class="meta-value">{{ assessment_id }}</p>
+            </div>
+            <div>
+                <p class="meta-label">Interview Link</p>
+                <p class="meta-value">{{ interview_id|default:"N/A" }}</p>
+            </div>
         </div>
     </header>
 
-    <main class="layout with-sidebar" style="justify-content: center;">
-        <aside class="chat-wrapper" style="max-width: 800px;">
-            <div class="panel">
-
-                <div class="panel-header">
+    <main class="layout layout-centered assessment-layout">
+        <section class="panel assessment-panel">
+            <div class="panel-header">
+                <div>
                     <h2>Assessment Interview</h2>
-                    <p>
-                        <strong>{{ user_info.name|default:"Candidate" }}</strong> -
-                        <span class="muted-text">{{ user_info.qualification|default:"" }}</span>
-                    </p>
+                    <p class="muted-text">Guide the candidate through each question and capture their responses.</p>
                 </div>
-
-                <div id="conversation" class="conversation empty" role="log" aria-live="polite">
-                    <div class="welcome-message">
-                        <p>Click "Start Assessment" to begin your technical interview.</p>
-                        <p class="sub-text">Make sure your microphone is enabled.</p>
-                    </div>
-                </div>
-
-                <div class="panel-controls">
-                    <div class="controls-left">
-                        <button id="start" class="control-btn primary">Start Assessment</button>
-                        <button id="stop" class="control-btn" disabled>Stop</button>
-                    </div>
-                    <div class="controls-right">
-                        <span id="status" class="control-status">Ready to start</span>
-                    </div>
-                </div>
-
-                <div class="audio">
-                    <audio id="remote" autoplay playsinline></audio>
-                </div>
-
+                <span class="pill">{{ questions|length }} questions</span>
             </div>
-        </aside>
+
+            <div id="conversation" class="conversation empty" role="log" aria-live="polite">
+                <div class="welcome-message">
+                    <p>Click "Start Assessment" to begin your technical interview.</p>
+                    <p class="sub-text">Make sure your microphone is enabled.</p>
+                </div>
+            </div>
+
+            <div class="panel-controls">
+                <div class="controls-left">
+                    <button id="start" class="control-btn primary">Start Assessment</button>
+                    <button id="stop" class="control-btn" disabled>Stop</button>
+                </div>
+                <div class="controls-right">
+                    <span id="status" class="control-status">Ready to start</span>
+                </div>
+            </div>
+
+            <div class="audio">
+                <audio id="remote" autoplay playsinline></audio>
+            </div>
+        </section>
     </main>
 
     <div id="toast-message" class="toast" role="status" aria-live="polite"></div>

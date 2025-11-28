@@ -42,6 +42,11 @@ urlpatterns = [
         views.generate_assessment,
         name="generate_assessment",
     ),
+    path(
+        "assessments/<uuid:assessment_id>/",
+        views.delete_assessment,
+        name="delete_assessment",
+    ),
     # Assessment endpoints
     path(
         "assessment/<str:assessment_id>/save/",

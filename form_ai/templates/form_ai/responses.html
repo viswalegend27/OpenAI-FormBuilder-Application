@@ -92,16 +92,18 @@
                             title="Delete response">Delete</button>
                     </div>
 
-                    <div class="actions-row actions-row-secondary">
+                    {% with assessment_count=conv.assessments.count %}
+                    <div class="actions-row actions-row-secondary" data-actions-conv-id="{{ conv.id }}">
                         <button class="control-btn primary generate-assessment-btn"
                             data-conv-id="{{ conv.id }}">Generate Assessment</button>
-                        {% if conv.assessments.exists %}
-                        <span class="status-pill success">Generated</span>
-                        <button class="control-btn view-assessments-btn" data-conv-id="{{ conv.id }}">
-                            View Assessments ({{ conv.assessments.count }})
+                        {% if assessment_count %}
+                        <span class="status-pill success" data-status-pill="{{ conv.id }}">Generated</span>
+                        <button class="control-btn secondary view-assessments-btn"
+                            data-conv-id="{{ conv.id }}" data-assessment-count="{{ assessment_count }}">
+                            View Assessments ({{ assessment_count }})
                         </button>
                         {% else %}
-                        <span class="status-pill muted">Pending</span>
+                        <span class="status-pill muted" data-status-pill="{{ conv.id }}">Pending</span>
                         {% endif %}
                     </div>
 
@@ -110,10 +112,10 @@
                         <button class="control-btn copy-btn">Copy</button>
                     </div>
 
-                    {% if conv.assessments.exists %}
+                    {% if assessment_count %}
                     <div class="assessments-list" id="assessments-{{ conv.id }}" style="display:none;">
                         {% for assessment in conv.assessments.all %}
-                        <div class="assessment-item">
+                        <div class="assessment-item" data-assessment-id="{{ assessment.id }}">
                             <div class="assessment-header">
                                 <div>
                                     <strong>Created:</strong>
@@ -148,10 +150,19 @@
                                 {% endfor %}
                             </div>
                             {% endif %}
+                            <div class="assessment-footer">
+                                <button
+                                    class="control-btn danger ghost delete-assessment-btn"
+                                    data-assessment-id="{{ assessment.id }}"
+                                    data-conv-id="{{ conv.id }}">
+                                    Delete assessment
+                                </button>
+                            </div>
                         </div>
                         {% endfor %}
                     </div>
                     {% endif %}
+                    {% endwith %}
 
                 </div>
 
@@ -178,7 +189,7 @@
             </div>
             <div class="modal-body" id="viewModalBody"></div>
             <div class="modal-footer">
-                <button class="control-btn modal-close">Close</button>
+                <button class="control-btn modal-close secondary">Close</button>
             </div>
         </div>
     </div>
@@ -190,14 +201,14 @@
                 <button class="modal-close" aria-label="Close">&times;</button>
             </div>
             <div class="modal-body">
-                <form id="editForm">
+                <form id="editForm" class="modal-form">
                     {% csrf_token %}
                     <input type="hidden" id="edit-conv-id" name="conv_id">
-                    <div id="editFormFields"></div>
+                    <div id="editFormFields" class="form-field-grid"></div>
                 </form>
             </div>
             <div class="modal-footer">
-                <button class="control-btn modal-close">Cancel</button>
+                <button class="control-btn modal-close secondary">Cancel</button>
                 <button class="control-btn primary" id="saveEditBtn">Save</button>
             </div>
         </div>
@@ -215,7 +226,7 @@
                 <input type="hidden" id="delete-conv-id">
             </div>
             <div class="modal-footer">
-                <button class="control-btn modal-close">Cancel</button>
+                <button class="control-btn modal-close secondary">Cancel</button>
                 <button class="control-btn danger" id="confirmDeleteBtn">Delete</button>
             </div>
         </div>

@@ -94,6 +94,12 @@ class APIService {
             method: 'POST'
         });
     }
+
+    deleteAssessment(assessmentId) {
+        return this.request(`/assessments/${assessmentId}/`, {
+            method: 'DELETE'
+        });
+    }
 }
 
 // ============================================================
@@ -220,6 +226,7 @@ class ResponseManager {
         this.on('.redirect-btn', 'click', (e) => this.handleRedirect(e.currentTarget.dataset.convId));
         this.on('.copy-btn', 'click', (e) => this.handleCopy(e.currentTarget));
         this.on('.view-assessments-btn', 'click', (e) => this.handleToggleAssessments(e.currentTarget.dataset.convId, e.currentTarget));
+        this.on('.delete-assessment-btn', 'click', (e) => this.handleAssessmentDelete(e.currentTarget));
 
         this.onClick('saveEditBtn', () => this.handleSaveEdit());
         this.onClick('confirmDeleteBtn', () => this.handleConfirmDelete());
@@ -318,12 +325,16 @@ class ResponseManager {
         const entries = Object.entries(userResponse);
         if (entries.length === 0) return '<p class="muted-text">No fields to edit</p>';
 
-        return entries.map(([key, value]) => `
-            <div class="form-group">
-                <label for="edit-${key}">${Utils.sanitizeHTML(fieldLabels[key] || Utils.formatLabel(key))}:</label>
-                <input type="text" id="edit-${key}" name="${key}" value="${Utils.sanitizeHTML(value || '')}" class="form-input" placeholder="Enter ${Utils.sanitizeHTML(fieldLabels[key] || Utils.formatLabel(key))}">
-            </div>
-        `).join('');
+        return entries.map(([key, value]) => {
+            const label = Utils.sanitizeHTML(fieldLabels[key] || Utils.formatLabel(key));
+            const safeValue = Utils.sanitizeHTML(value || "");
+            return `
+                <label class="form-field" for="edit-${key}">
+                    <span>${label}</span>
+                    <input type="text" id="edit-${key}" name="${key}" value="${safeValue}" placeholder="Enter ${label}">
+                </label>
+            `;
+        }).join('');
     }
 
     async handleSaveEdit() {
@@ -416,6 +427,61 @@ class ResponseManager {
                 this.showEmptyState();
             }
         }, 300);
+    }
+
+    async handleAssessmentDelete(button) {
+        const assessmentId = button.dataset.assessmentId;
+        const convId = button.dataset.convId;
+        if (!assessmentId || !convId) return;
+        if (!window.confirm('Delete this assessment record?')) return;
+
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = 'Deleting...';
+
+        try {
+            const data = await this.api.deleteAssessment(assessmentId);
+            this.toast.show('Assessment deleted', 'success');
+            this.removeAssessmentFromUI(convId, assessmentId, data.remaining_assessments || 0);
+        } catch (error) {
+            this.toast.show(`Delete failed: ${error.message}`, 'error');
+        } finally {
+            button.disabled = false;
+            button.textContent = originalText;
+        }
+    }
+
+    removeAssessmentFromUI(convId, assessmentId, remaining) {
+        const list = document.getElementById(`assessments-${convId}`);
+        if (list) {
+            const item = list.querySelector(`[data-assessment-id="${assessmentId}"]`);
+            if (item) {
+                item.classList.add('removing');
+                setTimeout(() => item.remove(), 200);
+            }
+            if (!remaining) {
+                list.style.display = 'none';
+            }
+        }
+
+        const viewBtn = document.querySelector(`.view-assessments-btn[data-conv-id="${convId}"]`);
+        if (viewBtn) {
+            if (remaining > 0) {
+                const expanded = viewBtn.getAttribute('aria-expanded') === 'true';
+                const prefix = expanded ? 'Hide' : 'View';
+                viewBtn.textContent = `${prefix} Assessments (${remaining})`;
+                viewBtn.dataset.assessmentCount = remaining;
+            } else {
+                viewBtn.remove();
+            }
+        }
+
+        const statusPill = document.querySelector(`.status-pill[data-status-pill="${convId}"]`);
+        if (statusPill) {
+            statusPill.textContent = remaining > 0 ? 'Generated' : 'Pending';
+            statusPill.classList.toggle('success', remaining > 0);
+            statusPill.classList.toggle('muted', remaining === 0);
+        }
     }
 
     showEmptyState() {
@@ -520,6 +586,14 @@ class ResponseManager {
 
     handleToggleAssessments(convId, btn) {
         const list = document.getElementById(`assessments-${convId}`);
+        if (!list) return;
+
+        if (!list.querySelector('.assessment-item')) {
+            this.toast.show('No assessments yet', 'info');
+            list.style.display = 'none';
+            return;
+        }
+
         const isHidden = list.style.display === 'none' || !list.style.display;
 
         list.style.display = isHidden ? 'block' : 'none';

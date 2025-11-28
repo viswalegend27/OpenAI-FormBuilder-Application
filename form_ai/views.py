@@ -1192,3 +1192,32 @@ def delete_response(request, conv_id: int):
     logger.info("[RESPONSES] Deleted conversation %s", conv_id)
 
     return json_ok({"message": "Response deleted successfully"})
+
+
+@csrf_exempt
+@require_http_methods(["DELETE"])
+@handle_view_errors("Failed to delete assessment")
+@transaction.atomic
+def delete_assessment(request, assessment_id):
+    """Delete an assessment and associated answers."""
+    assessment = get_object_or_fail(
+        TechnicalAssessment.objects.select_related("conversation"), id=assessment_id
+    )
+    conversation = assessment.conversation
+    assessment.delete()
+
+    remaining = conversation.assessments.count()
+    logger.info(
+        "[ASSESSMENT] Deleted assessment %s (conversation=%s remaining=%d)",
+        assessment_id,
+        conversation.id,
+        remaining,
+    )
+
+    return json_ok(
+        {
+            "assessment_id": str(assessment_id),
+            "conversation_id": conversation.id,
+            "remaining_assessments": remaining,
+        }
+    )

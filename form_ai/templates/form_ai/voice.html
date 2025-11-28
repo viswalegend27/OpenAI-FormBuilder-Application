@@ -7,67 +7,85 @@
   <title>Voice Interview - Form Builder</title>
   {% load static %}
   <link rel="icon" href="{% static 'form_ai/favicon.ico' %}" sizes="any">
+  <link rel="stylesheet" href="{% static 'form_ai/css/app-shell.css' %}">
   <link rel="stylesheet" href="{% static 'form_ai/css/voice.css' %}">
 </head>
 
 <body>
-  <header class="header" role="banner">
+  <nav class="app-nav">
+    <div class="brand">
+      <span class="brand-eyebrow">Voice Assistant</span>
+      <span class="brand-title">Live Interview</span>
+    </div>
+    <div class="nav-links">
+      <a href="{% url 'interview_builder' %}#builder" class="nav-link">New Interview</a>
+      <a href="{% url 'view_responses' %}" class="nav-link">Responses</a>
+    </div>
+  </nav>
+
+  <header class="hero">
     <div>
       <p class="eyebrow">Interview in progress</p>
       <h1>{{ interview.title }}</h1>
       <p class="subtitle">
         {% if interview.role %}{{ interview.role }} &middot; {% endif %}
-        {{ questions|length }} questions
+        {{ questions|length }} questions in this plan
       </p>
     </div>
-    <nav class="header-actions" aria-label="Primary actions">
-      <a href="{% url 'interview_builder' %}" class="control-btn" aria-label="Create another interview">New
-        Interview</a>
-      <a href="{% url 'view_responses' %}" class="control-btn" aria-label="View responses">Responses</a>
-    </nav>
+    <div class="hero-meta">
+      <div>
+        <p class="meta-label">Interview ID</p>
+        <p class="meta-value">{{ interview_id }}</p>
+      </div>
+      <div>
+        <p class="meta-label">Questions</p>
+        <p class="meta-value">{{ questions|length }}</p>
+      </div>
+    </div>
   </header>
 
-  <main class="layout with-sidebar">
-    <section class="workspace" aria-label="Interview details">
-      <div class="details-card">
-        <h2>Question plan</h2>
-        {% if interview.summary %}
-        <p class="muted-text">{{ interview.summary }}</p>
-        {% endif %}
-        <ul class="question-list">
-          {% for question in questions %}
-          <li>
-            <span class="question-number">{{ question.number }}</span>
-            <span class="question-text">{{ question.text }}</span>
-          </li>
-          {% endfor %}
-        </ul>
+  <main class="layout layout-two voice-layout">
+    <section class="panel question-plan" aria-label="Interview details">
+      <div class="panel-header">
+        <div>
+          <h2>Question plan</h2>
+          {% if interview.summary %}
+          <p class="muted-text">{{ interview.summary }}</p>
+          {% endif %}
+        </div>
+        <span class="pill">{{ questions|length }} steps</span>
       </div>
+      <ul class="question-list">
+        {% for question in questions %}
+        <li>
+          <span class="question-number">{{ question.number }}</span>
+          <span class="question-text">{{ question.text }}</span>
+        </li>
+        {% endfor %}
+      </ul>
     </section>
 
-    <aside class="chat-wrapper" aria-label="Conversation panel">
-      <div class="panel">
-        <div class="panel-header">
-          <h2>Conversation</h2>
+    <section class="panel voice-panel" aria-label="Conversation panel">
+      <div class="panel-header">
+        <h2>Conversation</h2>
+      </div>
+
+      <div id="conversation" class="conversation empty" role="log" aria-live="polite"></div>
+
+      <div class="panel-controls" role="region" aria-label="Recording controls">
+        <div class="controls-left">
+          <button id="start" class="control-btn primary">Start</button>
+          <button id="stop" class="control-btn" disabled>Stop</button>
         </div>
-
-        <div id="conversation" class="conversation empty" role="log" aria-live="polite"></div>
-
-        <div class="panel-controls" role="region" aria-label="Recording controls">
-          <div class="controls-left">
-            <button id="start" class="control-btn primary">Start</button>
-            <button id="stop" class="control-btn" disabled>Stop</button>
-          </div>
-          <div class="controls-right">
-            <span id="status" class="control-status">Click "Start" to begin</span>
-          </div>
-        </div>
-
-        <div class="audio">
-          <audio id="remote" autoplay playsinline></audio>
+        <div class="controls-right">
+          <span id="status" class="control-status">Click "Start" to begin</span>
         </div>
       </div>
-    </aside>
+
+      <div class="audio">
+        <audio id="remote" autoplay playsinline></audio>
+      </div>
+    </section>
   </main>
 
   <!-- Verification Popup -->
