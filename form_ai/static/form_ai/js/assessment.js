@@ -19,10 +19,39 @@ const conversationMessages = [];
 const qaMapping = {};
 
 let isNewAssistantResponse = true;
-let currentQuestionIndex = 0; // Track which question we're on (0, 1, 2)
+let currentQuestionIndex = 0;
 let sessionCreated = false;
 
-console.log("%c🎙️ ASSESSMENT READY", "color: #00ff00; font-size: 16px; font-weight: bold");
+const LOG_STYLES = {
+    info: "color:#2563eb;font-weight:700",
+    success: "color:#16a34a;font-weight:700",
+    warn: "color:#d97706;font-weight:700",
+    error: "color:#dc2626;font-weight:700"
+};
+
+const logInfo = (msg, ...rest) => console.log(`%c[ASSESSMENT] ${msg}`, LOG_STYLES.info, ...rest);
+const logSuccess = (msg, ...rest) => console.log(`%c[ASSESSMENT] ${msg}`, LOG_STYLES.success, ...rest);
+const logWarn = (msg, ...rest) => console.warn(`%c[ASSESSMENT] ${msg}`, LOG_STYLES.warn, ...rest);
+const logError = (msg, ...rest) => console.error(`%c[ASSESSMENT] ${msg}`, LOG_STYLES.error, ...rest);
+
+const sanitizeQuestionList = (source) => {
+    if (!Array.isArray(source)) return [];
+    return source
+        .map((item) => {
+            if (typeof item === "string") return item.trim();
+            if (item && typeof item === "object") {
+                return (item.text || item.question || item.prompt || "").trim();
+            }
+            return typeof item === "number" ? String(item) : "";
+        })
+        .filter((text) => text && text.length);
+};
+
+const ASSESSMENT_QUESTION_TEXT = sanitizeQuestionList(window.ASSESSMENT_QUESTIONS);
+const MAX_ASSESSMENT_QUESTIONS = ASSESSMENT_QUESTION_TEXT.length || 3;
+
+logSuccess("Assessment UI ready");
+logInfo(`Loaded ${MAX_ASSESSMENT_QUESTIONS} assessment question(s)`);
 
 // ============================================================
 // UTILITIES
@@ -208,12 +237,12 @@ async function startAssessment() {
         // ========================================================
 
         dc.addEventListener("open", () => {
-            console.log("%c[✓] Connected", "color: #00ff00; font-weight: bold");
+            logSuccess("Data channel connected");
             stopBtn && (stopBtn.disabled = false);
         });
 
         dc.addEventListener("error", (e) => {
-            console.error("[✗] Connection error:", e);
+            logError("Connection error", e);
             toast("Connection error");
         });
 
@@ -227,7 +256,7 @@ async function startAssessment() {
                     // -- [API CALL]: Trigger AI to start a response after session is established (WebRTC DataChannel)
                     dc.send(JSON.stringify({ type: "response.create" }));
                     status && (status.textContent = "Assessment in progress");
-                    console.log("%c[✓] Session started", "color: #00ff00; font-weight: bold");
+                    logSuccess("Realtime session started");
                 }
 
                 // ===== USER SPOKE =====
@@ -240,10 +269,9 @@ async function startAssessment() {
                         // Assign to current question sequentially
                         const qKey = `q${currentQuestionIndex + 1}`;
                         
-                        if (currentQuestionIndex < 3 && !qaMapping[qKey]) {
+                        if (currentQuestionIndex < MAX_ASSESSMENT_QUESTIONS && !qaMapping[qKey]) {
                             qaMapping[qKey] = transcript;
-                            console.log(`%c[✓] ${qKey} = "${transcript.substring(0, 60)}..."`, 
-                                "color: #00ff00; font-weight: bold; font-size: 12px");
+                            logSuccess(`${qKey} captured: "${transcript.substring(0, 60)}..."`);
                             currentQuestionIndex++;
                         }
                     }
@@ -279,8 +307,11 @@ async function startAssessment() {
                         
                         // Log if this looks like a question
                         if (isLikelyQuestion(finalText)) {
-                            console.log(`%c[→] Waiting for Q${currentQuestionIndex + 1} answer...`, 
-                                "color: #ffaa00; font-weight: bold");
+                            const nextQuestionNumber = Math.min(
+                                currentQuestionIndex + 1,
+                                MAX_ASSESSMENT_QUESTIONS
+                            );
+                            logWarn(`Waiting for response to Q${nextQuestionNumber}`);
                         }
                     } else if (currentAssistant && currentAssistant.msgEl) {
                         currentAssistant.msgEl.remove();
@@ -294,7 +325,7 @@ async function startAssessment() {
 
                 // ===== ERROR =====
                 if (msg.type === "error") {
-                    console.error("[✗] OpenAI error:", msg);
+                    logError("OpenAI error", msg);
                     toast("Session error occurred");
                 }
 
@@ -344,15 +375,10 @@ async function startAssessment() {
 
         status && (status.textContent = "Getting session...");
         // -- [API CALL]: Create ephemeral session on backend (assessment mode) and retrieve ephemeral key
-        const questionPayload = Array.isArray(window.ASSESSMENT_QUESTIONS)
-            ? window.ASSESSMENT_QUESTIONS.map((item) => {
-                  if (typeof item === "string") return item;
-                  if (item && typeof item === "object") {
-                      return item.text || item.question || "";
-                  }
-                  return "";
-              }).filter((text) => text && text.trim())
-            : [];
+        const questionPayload = ASSESSMENT_QUESTION_TEXT;
+        if (!questionPayload.length) {
+            logWarn("Assessment question payload empty; backend will use interview defaults");
+        }
 
         const sessResp = await fetch("/api/session", {
             method: "POST",
@@ -398,10 +424,10 @@ async function startAssessment() {
         await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
 
         status && (status.textContent = "Connected");
-        console.log("%c[✓] Assessment active", "color: #00ff00; font-size: 14px; font-weight: bold");
+        logSuccess("Assessment channel active");
 
     } catch (err) {
-        console.error("%c[✗] Error:", "color: #ff0000; font-weight: bold", err.message);
+        logError(`Fatal error: ${err.message}`);
         $("status") && ($("status").textContent = `Error: ${err.message}`);
         toast(`Error: ${err.message}`, 5000);
         cleanupResources();
@@ -455,9 +481,9 @@ async function saveAssessmentToServer(assessmentId, sessionId = null) {
         return null;
     }
 
-    console.log("%c[SAVE] Starting...", "color: #00aaff; font-weight: bold");
-    console.log(`[SAVE] Messages: ${validMessages.length}, Answers: ${Object.keys(qaMapping).length}`);
-    console.log("[SAVE] Q&A Mapping:", qaMapping);
+    logInfo("Persisting assessment transcript");
+    logInfo(`Messages captured: ${validMessages.length}`);
+    logInfo(`Answers captured: ${Object.keys(qaMapping).length}`, qaMapping);
 
     try {
         $("status") && ($("status").textContent = "Saving...");
@@ -474,13 +500,13 @@ async function saveAssessmentToServer(assessmentId, sessionId = null) {
         });
 
         if (!saveResp.ok) {
-            console.error("[✗] Save failed");
+            logError("Transcript save failed");
             toast("Save failed");
             return null;
         }
 
         const saveData = await saveResp.json();
-        console.log("%c[✓] Saved", "color: #00ff00");
+        logSuccess("Transcript saved");
 
         // Analyze answers
         $("status") && ($("status").textContent = "Analyzing...");
@@ -492,16 +518,15 @@ async function saveAssessmentToServer(assessmentId, sessionId = null) {
         });
 
         if (!analyzeResp.ok) {
-            console.error("[✗] Analysis failed");
+            logError("Answer extraction failed");
             toast("Saved but analysis failed", 4000);
             return saveData;
         }
 
         const analyzeData = await analyzeResp.json();
-        console.log("%c[✓] Analysis complete", "color: #00ff00");
-        console.log("[SAVE] Final answers:", analyzeData.answers);
+        logSuccess("Answer extraction complete", analyzeData.answers);
 
-        toast("Assessment completed ✓", 2000);
+        toast("Assessment completed!", 2000);
 
         setTimeout(() => {
             $("status") && ($("status").textContent = "Completed!");
@@ -511,7 +536,7 @@ async function saveAssessmentToServer(assessmentId, sessionId = null) {
         return { ...saveData, analysis: analyzeData };
 
     } catch (err) {
-        console.error("%c[✗] Save error:", "color: #ff0000", err.message);
+        logError(`Save error: ${err.message}`);
         toast(`Error: ${err.message}`, 5000);
         return null;
     }
@@ -529,7 +554,7 @@ function showCompletionMessage() {
     completion.className = "completion-message";
     completion.innerHTML = `
         <div class="completion-content">
-            <h3>✓ Assessment Completed</h3>
+            <h3>Assessment Completed</h3>
             <p>Thank you for completing the technical assessment!</p>
             <p class="sub-text">Your responses have been recorded.</p>
             <p class="sub-text">You may now close this window.</p>
@@ -558,7 +583,7 @@ document.getElementById("start")?.addEventListener("click", () => {
     stopBtn._wired = true;
 
     stopBtn.addEventListener("click", async () => {
-        console.log("%c[STOP] Ending assessment", "color: #ffaa00; font-weight: bold");
+        logWarn("Stopping assessment session");
         
         stopBtn.disabled = true;
         $("status") && ($("status").textContent = "Ending...");
@@ -577,7 +602,7 @@ document.getElementById("start")?.addEventListener("click", () => {
             await saveAssessmentToServer(assessmentId, window.currentSessionId);
         } else {
             toast("Error: No assessment ID", 5000);
-            console.error("[✗] No assessment ID");
+            logError("No assessment ID available");
         }
     });
 })();
@@ -586,6 +611,6 @@ document.getElementById("start")?.addEventListener("click", () => {
 // INIT
 // ============================================================
 
-console.log("Assessment ID:", window.ASSESSMENT_ID);
-console.log("Questions:", window.ASSESSMENT_QUESTIONS);
-console.log("User:", window.USER_INFO);
+logInfo(`Assessment ID: ${window.ASSESSMENT_ID}`);
+logInfo("Questions payload:", window.ASSESSMENT_QUESTIONS);
+logInfo("User payload:", window.USER_INFO);

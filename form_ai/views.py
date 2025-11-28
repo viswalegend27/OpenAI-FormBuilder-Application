@@ -274,6 +274,33 @@ def duplicate_fields(fields: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [field.copy() for field in fields]
 
 
+def normalize_question_list(source: list[Any] | None) -> list[str]:
+    """Convert arbitrary frontend payload into a clean list of strings."""
+    if not isinstance(source, list):
+        return []
+
+    cleaned: list[str] = []
+    for item in source:
+        text = ""
+        if isinstance(item, str):
+            text = item.strip()
+        elif isinstance(item, dict):
+            text = (
+                item.get("text")
+                or item.get("question")
+                or item.get("label")
+                or ""
+            )
+            text = str(text).strip()
+        else:
+            text = str(item).strip()
+
+        if text:
+            cleaned.append(text)
+
+    return cleaned
+
+
 def build_question_field(
     question: InterviewQuestion, metadata: dict[str, Any], used_keys: set[str]
 ) -> dict[str, Any]:
@@ -335,10 +362,16 @@ def build_session_payload(request) -> dict:
     payload = C.get_session_payload()
     payload["instructions"] = C.build_default_voice_instructions()
     body = safe_json_parse(request.body) if request.method == "POST" else {}
-    logger.info("[SESSION] Incoming session request. Method=%s, assessment=%s, interview_id=%s",
-                request.method,
-                bool(body.get("assessment_mode")),
-                request.GET.get("interview_id") or body.get("interview_id"))
+    assessment_mode = bool(body.get("assessment_mode"))
+    frontend_questions = (
+        normalize_question_list(body.get("questions")) if assessment_mode else []
+    )
+    logger.info(
+        "[SESSION] Incoming session request. Method=%s, assessment=%s, interview_id=%s",
+        request.method,
+        assessment_mode,
+        request.GET.get("interview_id") or body.get("interview_id"),
+    )
 
     interview_id = request.GET.get("interview_id") or body.get("interview_id")
     interview = None
@@ -363,24 +396,26 @@ def build_session_payload(request) -> dict:
         else:
             logger.warning("Interview %s not found for session payload", interview_id)
 
-    if body.get("assessment_mode"):
+    if assessment_mode:
         qualification = body.get("qualification", "")
         experience = body.get("experience", "")
 
-        if interview_questions is None:
-            questions_from_body = body.get("questions")
-            if isinstance(questions_from_body, list):
-                interview_questions = [
-                    str(item).strip()
-                    for item in questions_from_body
-                    if str(item).strip()
-                ]
-                logger.info(
-                    "[SESSION] Using question payload from frontend: "
-                    f"{len(interview_questions)} items"
-                )
+        if frontend_questions:
+            logger.info(
+                "[SESSION][ASSESSMENT] Using %d question(s) from frontend payload",
+                len(frontend_questions),
+            )
 
-        if not interview_questions:
+        questions_for_persona = frontend_questions or []
+        if not questions_for_persona and interview_questions:
+            logger.warning(
+                "[SESSION][ASSESSMENT] Frontend question payload empty; "
+                "falling back to interview template (%d questions)",
+                len(interview_questions),
+            )
+            questions_for_persona = interview_questions
+
+        if not questions_for_persona:
             raise AppError(
                 "Assessment questions are missing. Reopen the interview builder and retry.",
                 status=400,
@@ -389,11 +424,13 @@ def build_session_payload(request) -> dict:
         payload["instructions"] = C.get_assessment_persona(
             qualification,
             experience,
-            questions=interview_questions,
+            questions=questions_for_persona,
         )
         logger.info(
-            f"[SESSION] Built assessment persona for {qualification}/{experience} "
-            f"with {len(interview_questions)} questions"
+            "[SESSION][ASSESSMENT] Built persona for %s/%s with %d questions",
+            qualification,
+            experience,
+            len(questions_for_persona),
         )
         payload.pop("tools", None)
         payload.pop("tool_choice", None)
@@ -971,6 +1008,7 @@ def generate_assessment(request, conv_id: int):
     )
 
 
+@csrf_exempt
 @require_http_methods(["POST"])
 @handle_view_errors("Save failed")
 def save_assessment(request, assessment_id: str):
@@ -978,13 +1016,15 @@ def save_assessment(request, assessment_id: str):
     assessment = get_object_or_fail(TechnicalAssessment, id=assessment_id)
     body = safe_json_parse(request.body)
     messages = validate_field(body, "messages", list)
+    session_id = body.get("session_id")
 
     assessment.transcript = messages
     assessment.save(update_fields=["transcript", "updated_at"])
 
     logger.info(
-        "[ASSESSMENT] Saved transcript for %s (%d messages)",
+        "[ASSESSMENT:SAVE] assessment=%s session=%s messages=%d",
         assessment_id,
+        session_id or "-",
         len(messages),
     )
 
@@ -1004,15 +1044,22 @@ def analyze_assessment(request, assessment_id: str):
     )
     body = safe_json_parse(request.body)
 
-    logger.info(f"[ANALYZE] Assessment {assessment_id}")
+    logger.info("[ASSESSMENT:ANALYZE] assessment=%s questions=%d", assessment_id, assessment.questions.count())
 
     qa_mapping = body.get("qa_mapping")
 
     if qa_mapping and isinstance(qa_mapping, dict):
-        logger.info("[ANALYZE] Using direct Q&A mapping")
+        logger.info(
+            "[ASSESSMENT:ANALYZE] Using direct Q&A mapping (%d entries)",
+            len(qa_mapping),
+        )
         answers_dict = qa_mapping
     else:
-        logger.info(f"[ANALYZE] Extracting from {len(assessment.transcript)} messages")
+        transcript_len = len(assessment.transcript or [])
+        logger.info(
+            "[ASSESSMENT:ANALYZE] Extracting answers from transcript (%d messages)",
+            transcript_len,
+        )
         extractor = AssessmentExtractor()
         questions_text = [q.question_text for q in assessment.questions.all()]
         answers_dict = extractor.extract_answers(assessment.transcript, questions_text)
