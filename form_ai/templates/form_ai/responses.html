@@ -8,21 +8,45 @@
 
     {% load static %}
     <link rel="icon" href="{% static 'form_ai/favicon.ico' %}">
+    <link rel="stylesheet" href="{% static 'form_ai/css/app-shell.css' %}">
     <link rel="stylesheet" href="{% static 'form_ai/css/responses.css' %}">
 </head>
 
 <body>
-
-    <header class="header">
-        <div>
-            <h1>Interview Responses</h1>
+    <nav class="app-nav">
+        <div class="brand">
+            <span class="brand-eyebrow">Voice Assistant</span>
+            <span class="brand-title">Responses</span>
         </div>
-        <nav class="header-actions">
-            <a href="{% url 'interview_builder' %}" class="control-btn">Back to Builder</a>
-        </nav>
+        <div class="nav-links">
+            <a href="{% url 'interview_builder' %}#builder" class="nav-link">New Interview</a>
+            <a href="{% url 'view_responses' %}" class="nav-link active">Responses</a>
+        </div>
+    </nav>
+
+    <header class="hero">
+        <div>
+            <p class="eyebrow">Recent Conversations</p>
+            <h1>Interview Responses</h1>
+            <p class="subtitle">Review transcripts, edit captured data, and trigger assessments in one workspace.</p>
+        </div>
+        <div class="hero-meta">
+            <div>
+                <p class="meta-label">Responses logged</p>
+                <p class="meta-value">{{ conversations|length }}</p>
+            </div>
+            <div>
+                <p class="meta-label">Latest update</p>
+                <p class="meta-value">
+                    {% with latest=conversations|first %}
+                        {% if latest %}{{ latest.created_at|date:"M d, Y" }}{% else %}-{% endif %}
+                    {% endwith %}
+                </p>
+            </div>
+        </div>
     </header>
 
-    <main class="layout">
+    <main class="layout layout-single responses-layout">
 
         {% if conversations %}
         <ul class="responses-list">
@@ -68,13 +92,16 @@
                             title="Delete response">Delete</button>
                     </div>
 
-                    <div class="actions-row">
+                    <div class="actions-row actions-row-secondary">
                         <button class="control-btn primary generate-assessment-btn"
                             data-conv-id="{{ conv.id }}">Generate Assessment</button>
                         {% if conv.assessments.exists %}
+                        <span class="status-pill success">Generated</span>
                         <button class="control-btn view-assessments-btn" data-conv-id="{{ conv.id }}">
                             View Assessments ({{ conv.assessments.count }})
                         </button>
+                        {% else %}
+                        <span class="status-pill muted">Pending</span>
                         {% endif %}
                     </div>
 
