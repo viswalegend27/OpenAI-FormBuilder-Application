@@ -34,6 +34,14 @@ const logSuccess = (msg, ...rest) => console.log(`%c[ASSESSMENT] ${msg}`, LOG_ST
 const logWarn = (msg, ...rest) => console.warn(`%c[ASSESSMENT] ${msg}`, LOG_STYLES.warn, ...rest);
 const logError = (msg, ...rest) => console.error(`%c[ASSESSMENT] ${msg}`, LOG_STYLES.error, ...rest);
 
+const startButtonEl = document.getElementById("start");
+const defaultStartLabel = startButtonEl ? (startButtonEl.textContent.trim() || "Start Assessment") : "Start Assessment";
+const setStartButtonState = (label, disabled) => {
+    if (!startButtonEl) return;
+    if (label) startButtonEl.textContent = label;
+    if (typeof disabled === "boolean") startButtonEl.disabled = disabled;
+};
+
 const sanitizeQuestionList = (source) => {
     if (!Array.isArray(source)) return [];
     return source
@@ -424,6 +432,7 @@ async function startAssessment() {
         await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
 
         status && (status.textContent = "Connected");
+        setStartButtonState("Running", true);
         logSuccess("Assessment channel active");
 
     } catch (err) {
@@ -431,6 +440,7 @@ async function startAssessment() {
         $("status") && ($("status").textContent = `Error: ${err.message}`);
         toast(`Error: ${err.message}`, 5000);
         cleanupResources();
+        setStartButtonState(defaultStartLabel, false);
     }
 }
 
@@ -568,12 +578,8 @@ function showCompletionMessage() {
 // EVENT LISTENERS
 // ============================================================
 
-document.getElementById("start")?.addEventListener("click", () => {
-    const startBtn = $("start");
-    if (startBtn) {
-        startBtn.disabled = true;
-        startBtn.textContent = "Starting...";
-    }
+startButtonEl?.addEventListener("click", () => {
+    setStartButtonState("Starting...", true);
     startAssessment();
 });
 
@@ -604,6 +610,8 @@ document.getElementById("start")?.addEventListener("click", () => {
             toast("Error: No assessment ID", 5000);
             logError("No assessment ID available");
         }
+
+        setStartButtonState(defaultStartLabel, false);
     });
 })();
 

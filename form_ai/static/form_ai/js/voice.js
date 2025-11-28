@@ -21,6 +21,7 @@ const voiceLog = (...args) => console.log("[Voice]", ...args);
 
 const conversationMessages = [];
 let isNewAssistantResponse = true;
+let micPausedForVerification = false;
 
 const VERIFICATION_FIELDS = Array.isArray(window.VERIFICATION_FIELDS)
     ? window.VERIFICATION_FIELDS
@@ -205,10 +206,27 @@ function showVerificationPopup(data) {
     });
 
     popup.style.display = "flex";
+    if (!micPausedForVerification) {
+        pauseMicForVerification(true);
+    }
 }
 
 function hideVerificationPopup() {
     $("verification-popup").style.display = "none";
+    if (micPausedForVerification) {
+        pauseMicForVerification(false);
+    }
+}
+
+function pauseMicForVerification(paused) {
+    const stream = window._micStream;
+    if (!stream?.getAudioTracks) return;
+    stream.getAudioTracks().forEach((track) => {
+        if (track.kind === "audio") {
+            track.enabled = !paused;
+        }
+    });
+    micPausedForVerification = paused;
 }
 
 function normalizeVerifiedData(data) {
