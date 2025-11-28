@@ -76,7 +76,7 @@
             <div class="panel-header">
                 <div>
                     <h2>Existing interviews</h2>
-                    <p class="panel-subtitle">
+                    <p class="panel-subtitle" id="existing-count-label">
                         {{ existing_count }} configured · reuse an interview to keep your AI prompts consistent.
                     </p>
                 </div>
@@ -121,6 +121,13 @@
                     </div>
                     {% endwith %}
                     <div class="card-actions">
+                        <button
+                            type="button"
+                            class="control-btn danger delete-interview-btn"
+                            data-interview-id="{{ interview.id }}"
+                            data-interview-title="{{ interview.title|escape }}">
+                            Delete
+                        </button>
                         <a href="{% url 'voice_page' interview.id %}" class="control-btn primary">Start interview</a>
                     </div>
                 </article>

@@ -67,9 +67,33 @@ def get_persona() -> str:
     return content
 
 
+@lru_cache(maxsize=1)
+def get_question_templates() -> List[str]:
+    """Load sample assessment questions from markdown file."""
+    content = _read_file(_QUESTIONS_PATH)
+    if not content:
+        logger.warning("Question template file is missing or empty")
+        return []
+
+    parsed = _parse_numbered_list(content)
+    if parsed:
+        return parsed
+
+    return [line.strip("- ").strip() for line in content.splitlines() if line.strip()]
+
+
+def get_question_template_samples(limit: int = 5) -> List[str]:
+    """Return a limited set of templates for prompting."""
+    templates = get_question_templates()
+    if limit and templates:
+        return templates[:limit]
+    return templates
+
+
 def clear_cache():
     """Clear cached content."""
     get_persona.cache_clear()
+    get_question_templates.cache_clear()
 
 
 def _compose_voice_instructions(

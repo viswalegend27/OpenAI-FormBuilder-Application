@@ -102,10 +102,22 @@ a {
     color: var(--accent);
 }
 
+.control-btn.danger {
+    background: rgba(217, 83, 79, 0.12);
+    color: var(--danger);
+    border-color: rgba(217, 83, 79, 0.3);
+}
+
 .control-btn:hover:not(:disabled) {
     background: var(--accent-dark);
     color: #fff;
     border-color: var(--accent-dark);
+}
+
+.control-btn.danger:hover:not(:disabled) {
+    background: var(--danger);
+    color: #fff;
+    border-color: var(--danger);
 }
 
 .form-grid {
@@ -288,7 +300,10 @@ a {
 
 .card-actions {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
 }
 
 .empty-state {

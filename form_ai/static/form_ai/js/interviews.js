@@ -172,18 +172,27 @@ class InterviewBuilderApp {
 class ExistingInterviewManager {
     constructor(toast) {
         this.toast = toast;
-        this.bindDeleteButtons();
+        this.bindQuestionDeletes();
+        this.bindInterviewDeletes();
     }
 
-    bindDeleteButtons() {
+    bindQuestionDeletes() {
         document.querySelectorAll(".delete-question-btn").forEach((btn) => {
             if (btn._wired) return;
             btn._wired = true;
-            btn.addEventListener("click", () => this.handleDelete(btn));
+            btn.addEventListener("click", () => this.handleDeleteQuestion(btn));
         });
     }
 
-    async handleDelete(button) {
+    bindInterviewDeletes() {
+        document.querySelectorAll(".delete-interview-btn").forEach((btn) => {
+            if (btn._wired) return;
+            btn._wired = true;
+            btn.addEventListener("click", () => this.handleDeleteInterview(btn));
+        });
+    }
+
+    async handleDeleteQuestion(button) {
         const questionId = button.dataset.questionId;
         if (!questionId) return;
         if (!window.confirm("Delete this question from the interview?")) return;
@@ -232,6 +241,68 @@ class ExistingInterviewManager {
 
         if (countLabel) {
             countLabel.textContent = `${items.length} question${items.length === 1 ? "" : "s"}`;
+        }
+    }
+
+    async handleDeleteInterview(button) {
+        const interviewId = button.dataset.interviewId;
+        if (!interviewId) return;
+
+        const title = button.dataset.interviewTitle || "this interview";
+        if (
+            !window.confirm(
+                `Delete "${title}"? This removes the interview and its questions (responses stay saved).`
+            )
+        ) {
+            return;
+        }
+
+        const card = button.closest(".interview-card");
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = "Deleting...";
+
+        try {
+            const response = await fetch(`/api/interviews/${interviewId}/`, {
+                method: "DELETE",
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || "Failed to delete interview");
+            }
+
+            card?.remove();
+            this.updateExistingCount(data.remaining_interviews);
+            this.toast?.show?.("Interview deleted");
+        } catch (error) {
+            console.error("Delete interview failed", error);
+            this.toast?.show?.(error.message || "Delete failed");
+        } finally {
+            button.disabled = false;
+            button.textContent = originalText;
+        }
+    }
+
+    updateExistingCount(serverCount) {
+        const currentCount =
+            typeof serverCount === "number"
+                ? serverCount
+                : document.querySelectorAll(".interview-card").length;
+        const label = document.getElementById("existing-count-label");
+        if (label && currentCount >= 0) {
+            label.textContent = `${currentCount} configured · reuse an interview to keep your AI prompts consistent.`;
+        }
+
+        if (currentCount === 0) {
+            const list = document.querySelector(".interview-list");
+            if (list) {
+                list.innerHTML = `
+                    <div class="empty-state">
+                        <p>No interviews yet.</p>
+                        <p class="muted-text">Use the form to create your first question set.</p>
+                    </div>
+                `;
+            }
         }
     }
 }

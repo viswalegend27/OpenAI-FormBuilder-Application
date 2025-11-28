@@ -458,6 +458,87 @@ class QuestionIntentSummarizer:
         return results
 
 
+ROLE_QUESTION_SCHEMA = {
+    "name": "RoleSpecificQuestions",
+    "schema": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "questions": {
+                "type": "array",
+                "minItems": 3,
+                "maxItems": 5,
+                "items": {"type": "string"},
+            }
+        },
+        "required": ["questions"],
+    },
+    "strict": True,
+}
+
+
+class RoleQuestionGenerator:
+    """Generate concise, role-specific assessment questions."""
+
+    def __init__(self, api_key: Optional[str] = None):
+        self.client = OpenAIClient(api_key)
+
+    def generate(
+        self,
+        role: str,
+        examples: Optional[List[str]] = None,
+        count: int = 3,
+    ) -> List[str]:
+        role_label = (role or "software engineering").strip() or "software engineering"
+        example_section = ""
+        if examples:
+            formatted = "\n".join(f"- {item}" for item in examples if item)
+            if formatted:
+                example_section = f"Example question styles:\n{formatted}\n\n"
+
+        prompt = (
+            f"{example_section}"
+            f"Generate EXACTLY {count} unique technical interview questions for a candidate applying to a {role_label} role.\n"
+            "Guidelines:\n"
+            "- Cover different subtopics relevant to the role (architecture, tooling, problem-solving, collaboration, etc.).\n"
+            "- Keep every question under 22 words and avoid yes/no phrasing.\n"
+            "- Focus on practical experience or how the candidate approaches the work.\n"
+            "- Do not repeat the role name more than once per question.\n"
+            "Return JSON that matches the provided schema."
+        )
+
+        try:
+            data = self.client.chat_completion(
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.4,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": ROLE_QUESTION_SCHEMA,
+                },
+            )
+            content = data["choices"][0]["message"]["content"]
+            parsed = json.loads(content)
+            questions = [
+                str(item).strip()
+                for item in parsed.get("questions", [])
+                if isinstance(item, str) and item.strip()
+            ]
+
+            deduped: List[str] = []
+            seen: set[str] = set()
+            for question in questions:
+                key = question.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                deduped.append(question)
+
+            return deduped[:count]
+        except (KeyError, IndexError, json.JSONDecodeError, AppError) as exc:
+            logger.warning(f"[ROLE_QUESTIONS] Failed to generate questions: {exc}")
+            return []
+
+
 def get_recent_user_responses(limit: int = 10) -> List[Dict[str, Any]]:
     """Query database for recent user responses."""
     # Placeholder for actual implementation

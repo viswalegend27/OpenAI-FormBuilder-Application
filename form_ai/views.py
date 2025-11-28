@@ -2,7 +2,7 @@
 
 import logging
 import re
-from typing import Any, Dict
+from typing import Any, Dict, List
 from django.core.signing import TimestampSigner, BadSignature, SignatureExpired
 from django.db import transaction
 from django.shortcuts import render, redirect
@@ -25,6 +25,7 @@ from .views_schema_ import (
     AssessmentExtractor,
     OpenAIClient,
     QuestionIntentSummarizer,
+    RoleQuestionGenerator,
     get_object_or_fail,
     handle_view_errors,
     safe_json_parse,
@@ -39,6 +40,13 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 ASSESSMENT_TOKEN_MAX_AGE = 60 * 60 * 24 * 7  # 7 days
+TARGET_ASSESSMENT_QUESTIONS = 3
+ROLE_FALLBACK_TEMPLATES = [
+    "Walk me through a recent {role} project you delivered. What problem did it solve and what stack did you use?",
+    "How do you ensure quality and performance when building {role} features end-to-end?",
+    "Describe a tough technical challenge you faced in {role} work and how you approached it.",
+    "Which tools or frameworks are indispensable for you in {role}, and why?",
+]
 
 
 # ============================================================================
@@ -469,6 +477,27 @@ def build_display_fields(conversation: VoiceConversation) -> list[dict[str, Any]
     return display_fields
 
 
+def build_role_fallback_questions(role: str, count: int = TARGET_ASSESSMENT_QUESTIONS) -> list[str]:
+    """Provide deterministic fallback questions when LLM is unavailable."""
+    label = role or "this role"
+    questions: list[str] = []
+    for template in ROLE_FALLBACK_TEMPLATES:
+        question = template.format(role=label)
+        if question in questions:
+            continue
+        questions.append(question)
+        if len(questions) >= count:
+            break
+
+    if not questions:
+        questions = [
+            f"Describe your most impactful project related to {label}.",
+            f"What tools or frameworks define your work in {label}?",
+            f"Share a technical challenge you solved while working in {label}.",
+        ]
+    return questions
+
+
 # ============================================================================
 # Page Views
 # ============================================================================
@@ -662,6 +691,39 @@ def create_interview(request):
 
 @csrf_exempt
 @require_http_methods(["DELETE"])
+@handle_view_errors("Failed to delete interview")
+@transaction.atomic
+def delete_interview(request, interview_id: str):
+    """Delete an entire interview form and its questions."""
+    interview = get_object_or_fail(
+        InterviewForm.objects.prefetch_related("questions"), id=interview_id
+    )
+
+    question_count = interview.questions.count()
+    title = interview.title
+    interview.delete()
+
+    remaining = InterviewForm.objects.count()
+
+    logger.info(
+        "[INTERVIEW] Deleted interview %s (%s) with %d questions",
+        interview_id,
+        title,
+        question_count,
+    )
+
+    return json_ok(
+        {
+            "interview_id": str(interview_id),
+            "title": title,
+            "deleted_questions": question_count,
+            "remaining_interviews": remaining,
+        }
+    )
+
+
+@csrf_exempt
+@require_http_methods(["DELETE"])
 @handle_view_errors("Failed to delete interview question")
 @transaction.atomic
 def delete_interview_question(request, question_id: int):
@@ -817,16 +879,56 @@ def generate_assessment(request, conv_id: int):
         )
 
     # Get role from interview form
-    role = interview_form.role or interview_form.title
+    role = (interview_form.role or interview_form.title or "").strip()
+    target_count = TARGET_ASSESSMENT_QUESTIONS
 
-    # Fetch role-based assessment questions from database
-    questions_list = C.get_assessment_questions_for_role(role)
+    # Use stored questions as examples but prefer dynamic generation per role
+    seeded_examples = C.get_assessment_questions_for_role(role)
+    template_examples = seeded_examples or C.get_question_template_samples(5)
 
-    if not questions_list:
-        logger.error(f"[GENERATE] No assessment questions for role: {role}")
+    generator = RoleQuestionGenerator()
+    questions_list = generator.generate(role, template_examples, count=target_count)
+
+    if questions_list:
+        logger.info(
+            "[GENERATE] Generated %d AI questions for role '%s'",
+            len(questions_list),
+            role,
+        )
+    else:
+        logger.warning(
+            "[GENERATE] AI question generator returned no results for role '%s'",
+            role,
+        )
+        questions_list = []
+
+    def extend_questions(source: list[str]):
+        if not source:
+            return
+        for item in source:
+            text = (item or "").strip()
+            if not text:
+                continue
+            if text in questions_list:
+                continue
+            questions_list.append(text)
+            if len(questions_list) >= target_count:
+                break
+
+    if len(questions_list) < target_count:
+        extend_questions(seeded_examples)
+    if len(questions_list) < target_count:
+        extend_questions(C.get_question_template_samples(target_count * 2))
+    if len(questions_list) < target_count:
+        extend_questions(build_role_fallback_questions(role, target_count))
+
+    questions_list = [q for q in questions_list if q.strip()][:target_count]
+
+    if len(questions_list) < target_count:
+        logger.error(f"[GENERATE] Unable to assemble assessment questions for role: {role}")
         return json_fail(
-            f"No technical questions configured for role '{role}'. Please configure assessment questions first.",
-            status=400,
+            "Could not generate assessment questions. Please try again in a moment.",
+            status=500,
         )
 
     # Create assessment with qa_snapshot

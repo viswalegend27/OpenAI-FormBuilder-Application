@@ -15,6 +15,11 @@ urlpatterns = [
     # API endpoints
     path("api/interviews/", views.create_interview, name="create_interview"),
     path(
+        "api/interviews/<uuid:interview_id>/",
+        views.delete_interview,
+        name="delete_interview",
+    ),
+    path(
         "api/interviews/questions/<int:question_id>/",
         views.delete_interview_question,
         name="delete_interview_question",
