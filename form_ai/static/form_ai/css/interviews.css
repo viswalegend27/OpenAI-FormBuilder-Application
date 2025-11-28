@@ -30,11 +30,92 @@ a {
     color: inherit;
 }
 
-.header {
+.app-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.25rem clamp(1rem, 4vw, 3rem);
+    background: #ffffff;
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 6px 20px rgba(15, 130, 140, 0.06);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+}
+
+.brand {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.brand-eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    font-size: 0.7rem;
+    color: var(--muted);
+}
+
+.brand-title {
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--text);
+}
+
+.nav-links {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.nav-link {
+    padding: 0.5rem 1rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-weight: 600;
+    color: var(--muted);
+    transition: background 0.2s ease, color 0.2s ease, border 0.2s ease;
+}
+
+.nav-link:hover,
+.nav-link:focus-visible {
+    background: rgba(15, 130, 140, 0.12);
+    color: var(--accent);
+    outline: none;
+}
+
+.hero {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 2rem clamp(1rem, 4vw, 3rem);
+    gap: 2rem;
+}
+
+.hero-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
+    gap: 1rem;
+    padding: 1.2rem;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    background: var(--panel-bg);
+    box-shadow: var(--shadow);
+}
+
+.meta-label {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.meta-value {
+    margin: 0.2rem 0 0;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--text);
 }
 
 .eyebrow {
