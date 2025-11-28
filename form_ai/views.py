@@ -39,14 +39,6 @@ logger = logging.getLogger(__name__)
 
 ASSESSMENT_TOKEN_MAX_AGE = 60 * 60 * 24 * 7  # 7 days
 TARGET_ASSESSMENT_QUESTIONS = 3
-ROLE_FALLBACK_TEMPLATES = [
-    "Walk me through a recent {role} project you delivered. What problem did it solve and what stack did you use?",
-    "How do you ensure quality and performance when building {role} features end-to-end?",
-    "Describe a tough technical challenge you faced in {role} work and how you approached it.",
-    "Which tools or frameworks are indispensable for you in {role}, and why?",
-]
-
-
 # ============================================================================
 # Token Management
 # ============================================================================
@@ -363,7 +355,6 @@ def get_verification_schema(
 def build_session_payload(request) -> dict:
     """Build session payload based on request type and assessment mode."""
     payload = C.get_session_payload()
-    payload["instructions"] = C.build_default_voice_instructions()
     body = safe_json_parse(request.body) if request.method == "POST" else {}
     assessment_mode = bool(body.get("assessment_mode"))
     frontend_questions = (
@@ -378,22 +369,18 @@ def build_session_payload(request) -> dict:
 
     interview_id = request.GET.get("interview_id") or body.get("interview_id")
     interview = None
-    interview_questions: list[str] | None = None
-    verification_fields, extraction_keys = get_verification_schema(None)
+    verification_fields: list[dict[str, Any]] = []
+    extraction_keys: list[str] = []
 
     if interview_id:
         logger.info(f"[SESSION] Requested interview_id={interview_id}")
-        interview = InterviewForm.objects.filter(id=interview_id).first()
-        if interview:
-            verification_fields, extraction_keys = get_verification_schema(interview)
-            interview_questions = interview.question_texts()
-            logger.info(
-                f"[SESSION] Using interview {interview.id} with "
-                f"{len(interview_questions)} questions"
-            )
-            payload["instructions"] = C.build_interview_instructions(interview)
-        else:
-            logger.warning("Interview %s not found for session payload", interview_id)
+        interview = get_object_or_fail(InterviewForm, id=interview_id)
+        verification_fields, extraction_keys = get_verification_schema(interview)
+    elif not assessment_mode:
+        raise AppError(
+            "Interview ID is required to start a realtime session.",
+            status=400,
+        )
 
     if assessment_mode:
         qualification = body.get("qualification", "")
@@ -406,13 +393,8 @@ def build_session_payload(request) -> dict:
             )
 
         questions_for_persona = frontend_questions or []
-        if not questions_for_persona and interview_questions:
-            logger.warning(
-                "[SESSION][ASSESSMENT] Frontend question payload empty; "
-                "falling back to interview template (%d questions)",
-                len(interview_questions),
-            )
-            questions_for_persona = interview_questions
+        if not questions_for_persona and interview:
+            questions_for_persona = interview.question_texts()
 
         if not questions_for_persona:
             raise AppError(
@@ -434,6 +416,7 @@ def build_session_payload(request) -> dict:
         payload.pop("tools", None)
         payload.pop("tool_choice", None)
     else:
+        payload["instructions"] = C.build_interview_instructions(interview)
         payload["tools"] = [C.build_verify_tool(verification_fields)]
         payload["tool_choice"] = "auto"
         logger.info(
@@ -511,27 +494,6 @@ def build_display_fields(conversation: VoiceConversation) -> list[dict[str, Any]
             }
         )
     return display_fields
-
-
-def build_role_fallback_questions(role: str, count: int = TARGET_ASSESSMENT_QUESTIONS) -> list[str]:
-    """Provide deterministic fallback questions when LLM is unavailable."""
-    label = role or "this role"
-    questions: list[str] = []
-    for template in ROLE_FALLBACK_TEMPLATES:
-        question = template.format(role=label)
-        if question in questions:
-            continue
-        questions.append(question)
-        if len(questions) >= count:
-            break
-
-    if not questions:
-        questions = [
-            f"Describe your most impactful project related to {label}.",
-            f"What tools or frameworks define your work in {label}?",
-            f"Share a technical challenge you solved while working in {label}.",
-        ]
-    return questions
 
 
 # ============================================================================
@@ -908,54 +870,19 @@ def generate_assessment(request, conv_id: int):
     role = (interview_form.role or interview_form.title or "").strip()
     target_count = TARGET_ASSESSMENT_QUESTIONS
 
-    # Use stored questions as examples but prefer dynamic generation per role
-    seeded_examples = C.get_assessment_questions_for_role(role)
-    template_examples = seeded_examples or C.get_question_template_samples(5)
-
-    generator = RoleQuestionGenerator()
-    questions_list = generator.generate(role, template_examples, count=target_count)
-
-    if questions_list:
-        logger.info(
-            "[GENERATE] Generated %d AI questions for role '%s'",
-            len(questions_list),
-            role,
-        )
+    stored_questions = C.get_assessment_questions_for_role(role)
+    if len(stored_questions) >= target_count:
+        questions_list = stored_questions[:target_count]
     else:
-        logger.warning(
-            "[GENERATE] AI question generator returned no results for role '%s'",
-            role,
-        )
-        questions_list = []
-
-    def extend_questions(source: list[str]):
-        if not source:
-            return
-        for item in source:
-            text = (item or "").strip()
-            if not text:
-                continue
-            if text in questions_list:
-                continue
-            questions_list.append(text)
-            if len(questions_list) >= target_count:
-                break
-
-    if len(questions_list) < target_count:
-        extend_questions(seeded_examples)
-    if len(questions_list) < target_count:
-        extend_questions(C.get_question_template_samples(target_count * 2))
-    if len(questions_list) < target_count:
-        extend_questions(build_role_fallback_questions(role, target_count))
-
-    questions_list = [q for q in questions_list if q.strip()][:target_count]
-
-    if len(questions_list) < target_count:
-        logger.error(f"[GENERATE] Unable to assemble assessment questions for role: {role}")
-        return json_fail(
-            "Could not generate assessment questions. Please try again in a moment.",
-            status=500,
-        )
+        generator = RoleQuestionGenerator()
+        questions_list = generator.generate(role, stored_questions, count=target_count)
+        questions_list = [q for q in questions_list if q.strip()]
+        if len(questions_list) < target_count:
+            logger.error("[GENERATE] Unable to assemble assessment questions for role: %s", role)
+            return json_fail(
+                "Could not generate assessment questions. Please add role-specific questions and try again.",
+                status=500,
+            )
 
     assessment = TechnicalAssessment.objects.create(
         conversation=conversation,

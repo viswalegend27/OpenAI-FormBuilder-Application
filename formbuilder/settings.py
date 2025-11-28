@@ -14,8 +14,10 @@ ALLOWED_HOSTS = ['localhost','127.0.0.1',]
 
 # My instructions path
 AI_INSTRUCTIONS_PATH = Path(BASE_DIR) / "form_ai" / "ai_instructions.md"
-# My questions path
-AI_QUESTIONS_PATH = BASE_DIR / "form_ai" / "questions.md" 
+OPENAI_REALTIME_MODEL = os.getenv("OPENAI_REALTIME_MODEL", "")
+OPENAI_REALTIME_VOICE = os.getenv("OPENAI_REALTIME_VOICE", "")
+OPENAI_REALTIME_TEMPERATURE = float(os.getenv("OPENAI_REALTIME_TEMPERATURE", "0.6"))
+TRANSCRIBE_MODEL = os.getenv("TRANSCRIBE_MODEL", "")
 
 # Application definition
 
