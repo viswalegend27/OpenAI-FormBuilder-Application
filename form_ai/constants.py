@@ -142,17 +142,6 @@ def build_verify_tool(fields: List[dict[str, Any]]) -> dict:
     }
 
 
-def get_assessment_questions_for_role(role: str) -> List[str]:
-    """Retrieve assessment questions dynamically from database for a role."""
-    from .models import AssessmentQuestionBank
-
-    questions = AssessmentQuestionBank.get_questions_for_role(role)
-    if not questions:
-        logger.warning(f"No assessment questions found for role: {role}")
-        return []
-    return questions
-
-
 # ============================================================================
 # Assessment Configuration
 # ============================================================================
@@ -181,8 +170,12 @@ You are conducting a technical assessment for a candidate with:
 Ask these questions one by one:
 {questions_formatted}
 
-Keep each question concise and wait for the answer before proceeding to the next.
-After all questions are answered, thank them and end the assessment."""
+Execution rules:
+- Speak in short, clear sentences and ask exactly one question at a time.
+- After asking a question, stop talking so the candidate can reply. Do not narrate, guess, or invent their answer.
+- If silence continues, gently prompt them (e.g., "Take your time—I'd love to hear your approach"), then pause again. Never provide content on their behalf.
+- Only move to the next question after you have heard the candidate's response for the current one.
+- Summarize briefly once all questions are answered, thank them, and end the assessment."""
 
 
 def build_interview_instructions(interview: InterviewForm) -> str:

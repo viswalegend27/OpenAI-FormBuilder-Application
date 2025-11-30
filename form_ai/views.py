@@ -15,7 +15,6 @@ from .helper.views_helper import AppError, json_fail, json_ok
 from .models import (
     VoiceConversation,
     TechnicalAssessment,
-    AssessmentQuestionBank,
     CandidateAnswer,
     InterviewForm,
 )
@@ -870,19 +869,33 @@ def generate_assessment(request, conv_id: int):
     role = (interview_form.role or interview_form.title or "").strip()
     target_count = TARGET_ASSESSMENT_QUESTIONS
 
-    stored_questions = C.get_assessment_questions_for_role(role)
-    if len(stored_questions) >= target_count:
-        questions_list = stored_questions[:target_count]
-    else:
-        generator = RoleQuestionGenerator()
-        questions_list = generator.generate(role, stored_questions, count=target_count)
-        questions_list = [q for q in questions_list if q.strip()]
-        if len(questions_list) < target_count:
-            logger.error("[GENERATE] Unable to assemble assessment questions for role: %s", role)
-            return json_fail(
-                "Could not generate assessment questions. Please add role-specific questions and try again.",
-                status=500,
-            )
+    generator = RoleQuestionGenerator()
+    style_examples = interview_form.question_texts()[: target_count * 2]
+    questions_list = generator.generate(
+        role,
+        style_examples or None,
+        count=target_count,
+    )
+    questions_list = [q.strip() for q in questions_list if q and q.strip()]
+
+    if len(questions_list) < target_count:
+        logger.warning(
+            "[GENERATE] Primary question generation returned %d/%d prompts for role '%s'. Retrying without examples.",
+            len(questions_list),
+            target_count,
+            role,
+        )
+        retry_questions = generator.generate(role, None, count=target_count)
+        retry_questions = [q.strip() for q in retry_questions if q and q.strip()]
+        if len(retry_questions) >= target_count:
+            questions_list = retry_questions
+
+    if len(questions_list) < target_count:
+        logger.error("[GENERATE] Unable to assemble assessment questions for role: %s", role)
+        return json_fail(
+            "Could not generate assessment questions. Please adjust your interview questions and try again.",
+            status=500,
+        )
 
     assessment = TechnicalAssessment.objects.create(
         conversation=conversation,
