@@ -27,7 +27,6 @@
       <p class="eyebrow">Interview in progress</p>
       <h1>{{ interview.title }}</h1>
       <p class="subtitle">
-        {% if interview.role %}{{ interview.role }} &middot; {% endif %}
         {{ questions|length }} questions in this plan
       </p>
     </div>
@@ -105,7 +104,6 @@
   <script>
     window.INTERVIEW_ID = "{{ interview_id }}";
     window.INTERVIEW_TITLE = "{{ interview.title|escapejs }}";
-    window.INTERVIEW_ROLE = "{{ interview.role|default:''|escapejs }}";
     window.INTERVIEW_QUESTIONS = JSON.parse(
       document.getElementById("interview-questions").textContent || "[]"
     );

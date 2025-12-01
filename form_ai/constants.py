@@ -186,9 +186,9 @@ def build_interview_instructions(interview: InterviewForm) -> str:
             f"Interview form '{interview.id}' does not have any questions configured"
         )
 
-    role = interview.role or interview.title
+    title_label = interview.title
     return _compose_voice_instructions(
         question_texts,
-        role,
+        title_label,
         custom_prompt=interview.ai_prompt or "",
     )

@@ -135,11 +135,6 @@
     flex-wrap: wrap;
 }
 
-.role-label {
-    font-size: 0.9rem;
-    color: var(--muted);
-}
-
 .summary-text {
     color: var(--muted);
     font-size: 0.95rem;

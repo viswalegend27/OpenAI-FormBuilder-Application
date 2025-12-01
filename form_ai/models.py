@@ -128,11 +128,6 @@ class InterviewForm(QuestionListMixin, models.Model):
     title = models.CharField(
         max_length=255, help_text="Internal name for the interview"
     )
-    role = models.CharField(
-        max_length=255,
-        blank=True,
-        help_text="Role or track this interview targets (e.g., Python Intern)",
-    )
     summary = models.TextField(
         blank=True, help_text="Short description shown on the builder page"
     )

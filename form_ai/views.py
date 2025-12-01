@@ -643,7 +643,6 @@ def create_interview(request):
     questions = validate_field(body, "questions", list)
     interview = InterviewFlow.create_form(
         title=title,
-        role=body.get("role") or "",
         summary=body.get("summary") or "",
         ai_prompt=body.get("ai_prompt") or "",
         questions=questions,
@@ -903,7 +902,6 @@ def view_response(request, conv_id: int):
                 {
                     "id": str(conversation.interview_form.id),
                     "title": conversation.interview_form.title,
-                    "role": conversation.interview_form.role,
                 }
                 if conversation.interview_form
                 else None

@@ -273,7 +273,6 @@ class ResponseManager {
                     <h3>Interview</h3>
                     <div class="view-grid">
                         <div><strong>Title:</strong> ${Utils.sanitizeHTML(data.interview_form.title || 'N/A')}</div>
-                        ${data.interview_form.role ? `<div><strong>Role:</strong> ${Utils.sanitizeHTML(data.interview_form.role)}</div>` : ''}
                     </div>
                 </div>
             ` : ''}

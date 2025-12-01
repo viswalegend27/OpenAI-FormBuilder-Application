@@ -54,7 +54,7 @@
             <div class="panel-header">
                 <div>
                     <h2>Design a new interview</h2>
-                    <p class="muted-text">Capture the role details, tone, and ordered questions you need.</p>
+                    <p class="muted-text">Capture the tone and ordered questions you need.</p>
                 </div>
                 <button id="add-question" class="control-btn secondary" type="button">+ Add question</button>
             </div>
@@ -64,10 +64,6 @@
                     <label class="form-field">
                         <span>Interview title *</span>
                         <input type="text" name="title" placeholder="e.g., Python Intern Screening" required />
-                    </label>
-                    <label class="form-field">
-                        <span>Role / Track</span>
-                        <input type="text" name="role" placeholder="e.g., Backend Intern" />
                     </label>
                 </div>
 
@@ -115,9 +111,6 @@
                 <article class="interview-card" data-interview-id="{{ interview.id }}">
                     <header>
                         <h3>{{ interview.title }}</h3>
-                        {% if interview.role %}
-                        <p class="role-label">{{ interview.role }}</p>
-                        {% endif %}
                     </header>
                     {% if interview.summary %}
                     <p class="summary-text">{{ interview.summary }}</p>

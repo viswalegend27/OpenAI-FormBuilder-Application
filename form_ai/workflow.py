@@ -21,7 +21,6 @@ class InterviewFlow:
     def create_form(
         *,
         title: str,
-        role: str = "",
         summary: str = "",
         ai_prompt: str = "",
         questions: Iterable[str],
@@ -37,7 +36,6 @@ class InterviewFlow:
 
         interview = InterviewForm.objects.create(
             title=title_value,
-            role=(role or "").strip(),
             summary=(summary or "").strip(),
             ai_prompt=(ai_prompt or "").strip(),
         )
@@ -152,15 +150,15 @@ class AssessmentFlow:
                 status=400,
             )
 
-        role = (interview_form.role or interview_form.title or "").strip()
-        if not role:
-            raise AppError("Interview form is missing a role or title", status=400)
+        role_label = (interview_form.title or "").strip()
+        if not role_label:
+            raise AppError("Interview form is missing a title", status=400)
 
         generator = generator or RoleQuestionGenerator()
         style_examples = interview_form.question_texts()[: target_count * 2]
 
         questions_list = AssessmentFlow._generate_questions(
-            generator, role, target_count, style_examples
+            generator, role_label, target_count, style_examples
         )
         if len(questions_list) < target_count:
             raise AppError(
@@ -175,10 +173,11 @@ class AssessmentFlow:
         assessment.set_questions(questions_list)
         assessment.save(update_fields=["questions", "updated_at"])
         logger.info(
-            "[FLOW:ASSESSMENT] Created assessment %s for conversation %s (%d questions)",
+            "[FLOW:ASSESSMENT] Created assessment %s for conversation %s (%d questions, title=%s)",
             assessment.id,
             conversation.pk,
             len(questions_list),
+            role_label,
         )
         return assessment, questions_list
 
@@ -195,7 +194,7 @@ class AssessmentFlow:
             return questions
 
         logger.warning(
-            "[FLOW:ASSESSMENT] Only generated %d/%d questions for role '%s'. Retrying without examples.",
+            "[FLOW:ASSESSMENT] Only generated %d/%d questions for title '%s'. Retrying without examples.",
             len(questions),
             target_count,
             role,
