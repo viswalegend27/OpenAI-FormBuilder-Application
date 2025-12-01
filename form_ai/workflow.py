@@ -1,5 +1,4 @@
 # workflow.py
-"""Workflow helpers that mirror the InterviewForm → VoiceConversation → TechnicalAssessment → CandidateAnswer ER flow."""
 
 from __future__ import annotations
 
@@ -173,8 +172,8 @@ class AssessmentFlow:
             conversation=conversation,
             interview_form=interview_form,
         )
-        assessment.append_questions(questions_list)
-        assessment.save(update_fields=["question_schema", "updated_at"])
+        assessment.set_questions(questions_list)
+        assessment.save(update_fields=["questions", "updated_at"])
         logger.info(
             "[FLOW:ASSESSMENT] Created assessment %s for conversation %s (%d questions)",
             assessment.id,
@@ -276,19 +275,21 @@ class AssessmentFlow:
         saved: Dict[str, str] = {}
 
         for entry in question_entries:
-            question_id = entry["id"]
-            seq_key = f"q{entry['sequence_number']}"
-            answer_text = (
-                answers_source.get(question_id)
-                or answers_source.get(str(question_id))
-                or answers_source.get(seq_key)
-                or answers_source.get(seq_key.lower())
-                or ""
-            )
+            question_key = entry["id"]
+            fallback_keys = [
+                question_key,
+                f"q{entry['sequence_number']}",
+                question_key.lower(),
+            ]
+            answer_text = ""
+            for key in fallback_keys:
+                if key in answers_source and answers_source[key] is not None:
+                    answer_text = answers_source[key]
+                    break
             normalized = (str(answer_text or "").strip()) or "NIL"
-            answers_map[question_id] = normalized
-            saved[question_id] = normalized
-            logger.debug("[FLOW:ASSESSMENT] Stored answer for question %s", question_id)
+            answers_map[question_key] = normalized
+            saved[question_key] = normalized
+            logger.debug("[FLOW:ASSESSMENT] Stored answer for question %s", question_key)
 
         answer_sheet.answers = answers_map
         answer_sheet.save(update_fields=["answers", "updated_at"])

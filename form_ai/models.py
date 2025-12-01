@@ -219,7 +219,7 @@ class VoiceConversation(models.Model):
         return self.extracted_info.get("experience", "")
 
 
-class TechnicalAssessment(QuestionListMixin, models.Model):
+class TechnicalAssessment(models.Model):
     """
     Technical assessment session for a candidate.
 
@@ -229,7 +229,6 @@ class TechnicalAssessment(QuestionListMixin, models.Model):
 
     JSONB Fields:
         - transcript: Assessment conversation history
-        - question_schema: Ordered technical question definitions
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -240,6 +239,11 @@ class TechnicalAssessment(QuestionListMixin, models.Model):
         blank=True,
         related_name="assessments",
         help_text="Interview template that supplied the questions",
+    )
+    questions = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Ordered question text prompts for this assessment",
     )
     conversation = models.ForeignKey(
         VoiceConversation,
@@ -266,10 +270,41 @@ class TechnicalAssessment(QuestionListMixin, models.Model):
         status = "Completed" if self.is_completed else "Pending"
         return f"Assessment {self.id} - {status}"
 
+    def question_list(self) -> list[str]:
+        """Return clean question text list."""
+        cleaned: list[str] = []
+        for item in self.questions or []:
+            text = (str(item).strip() if item is not None else "")
+            if text:
+                cleaned.append(text)
+        return cleaned
+
+    def set_questions(self, texts: list[str]) -> None:
+        """Persist ordered question text prompts."""
+        cleaned: list[str] = []
+        for text in texts or []:
+            normalized = (str(text).strip() if text is not None else "")
+            if normalized:
+                cleaned.append(normalized)
+        self.questions = cleaned
+
+    def get_question_entries(self) -> list[dict[str, Any]]:
+        """Return normalized question dictionaries for downstream callers."""
+        entries: list[dict[str, Any]] = []
+        for idx, text in enumerate(self.question_list(), start=1):
+            entries.append(
+                {
+                    "id": f"q{idx}",
+                    "sequence_number": idx,
+                    "text": text,
+                }
+            )
+        return entries
+
     @property
     def total_questions(self):
         """Total number of questions."""
-        return len(self.get_question_entries())
+        return len(self.question_list())
 
     @property
     def answered_count(self):
@@ -321,7 +356,7 @@ class CandidateAnswer(models.Model):
     answers = models.JSONField(
         default=dict,
         blank=True,
-        help_text="Question ID mapped to normalized answer text",
+        help_text="Question key (e.g., q1, q2) mapped to normalized answer text",
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
