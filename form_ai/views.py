@@ -11,18 +11,16 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST, require_http_methods
 
 from . import constants as C
-from .helper.views_helper import AppError, json_fail, json_ok
+from .helper.views_helper import AppError, json_ok
 from .models import (
     VoiceConversation,
     TechnicalAssessment,
-    CandidateAnswer,
     InterviewForm,
 )
+from .workflow import AssessmentFlow, ConversationFlow, InterviewFlow
 from .views_schema_ import (
-    AssessmentExtractor,
     OpenAIClient,
     QuestionIntentSummarizer,
-    RoleQuestionGenerator,
     get_object_or_fail,
     handle_view_errors,
     safe_json_parse,
@@ -643,36 +641,25 @@ def create_interview(request):
         raise AppError("Interview title is required", status=400)
 
     questions = validate_field(body, "questions", list)
-    cleaned_questions = [
-        str(item).strip()
-        for item in questions
-        if isinstance(item, str) and item.strip()
-    ]
-
-    if not cleaned_questions:
-        raise AppError("Add at least one interview question", status=400)
-
-    interview = InterviewForm.objects.create(
-        title=title.strip(),
-        role=(body.get("role") or "").strip(),
-        summary=(body.get("summary") or "").strip(),
-        ai_prompt=(body.get("ai_prompt") or "").strip(),
+    interview = InterviewFlow.create_form(
+        title=title,
+        role=body.get("role") or "",
+        summary=body.get("summary") or "",
+        ai_prompt=body.get("ai_prompt") or "",
+        questions=questions,
     )
-
-    interview.append_questions(cleaned_questions)
-    interview.save(update_fields=["question_schema", "updated_at"])
 
     redirect_path = reverse("voice_page", args=[interview.id])
     redirect_url = request.build_absolute_uri(redirect_path)
     print(
         f"[CREATE_INTERVIEW] Created interview {interview.id} "
-        f"({len(cleaned_questions)} questions)"
+        f"({len(interview.get_question_entries())} questions)"
     )
 
     return json_ok(
         {
             "interview_id": str(interview.id),
-            "question_count": len(cleaned_questions),
+            "question_count": len(interview.get_question_entries()),
             "redirect_url": redirect_url,
         },
         status=201,
@@ -687,27 +674,8 @@ def delete_interview(request, interview_id: str):
     """Delete an entire interview form and its questions."""
     interview = get_object_or_fail(InterviewForm, id=interview_id)
 
-    question_count = len(interview.get_question_entries())
-    title = interview.title
-    interview.delete()
-
-    remaining = InterviewForm.objects.count()
-
-    logger.info(
-        "[INTERVIEW] Deleted interview %s (%s) with %d questions",
-        interview_id,
-        title,
-        question_count,
-    )
-
-    return json_ok(
-        {
-            "interview_id": str(interview_id),
-            "title": title,
-            "deleted_questions": question_count,
-            "remaining_interviews": remaining,
-        }
-    )
+    payload = InterviewFlow.delete_form(interview)
+    return json_ok(payload)
 
 
 @csrf_exempt
@@ -718,31 +686,12 @@ def delete_interview_question(request, interview_id: str, question_id: str):
     """Delete a single interview question and resequence the remainder."""
     form = get_object_or_fail(InterviewForm, id=interview_id)
 
-    questions = form.get_question_entries()
-    if len(questions) <= 1:
-        raise AppError(
-            "At least one question is required per interview. Add another question before deleting this one.",
-            status=400,
-        )
-
-    if not form.remove_question(question_id):
-        raise AppError("Question not found on this interview", status=404)
-
-    form.save(update_fields=["question_schema", "updated_at"])
-    remaining = form.get_question_entries()
-
-    logger.info(
-        "[INTERVIEW] Deleted question %s from interview %s (remaining=%d)",
-        question_id,
-        interview_id,
-        len(remaining),
-    )
-
+    remaining = InterviewFlow.remove_question(form, question_id)
     return json_ok(
         {
             "interview_id": str(form.id),
             "question_id": question_id,
-            "remaining_questions": len(remaining),
+            "remaining_questions": remaining,
         }
     )
 
@@ -766,16 +715,10 @@ def save_conversation(request):
     if interview_id:
         interview_form = get_object_or_fail(InterviewForm, id=interview_id)
 
-    conversation = VoiceConversation.objects.create(
-        session_id=session_id,
+    conversation = ConversationFlow.save_conversation(
         messages=messages,
+        session_id=session_id,
         interview_form=interview_form,
-    )
-
-    logger.info(
-        "[CONVERSATION] Saved conversation %s with %d messages",
-        conversation.pk,
-        len(messages),
     )
 
     return json_ok(
@@ -813,14 +756,7 @@ def analyze_conversation(request):
             overrides,
         )
 
-    conversation.extracted_info = extracted_data
-    conversation.save(update_fields=["extracted_info", "updated_at"])
-
-    logger.info(
-        "[CONVERSATION] Analysis complete for %s (%s)",
-        conversation.pk,
-        ", ".join(extracted_data.keys()),
-    )
+    ConversationFlow.apply_analysis(conversation, extracted_data)
 
     return json_ok(
         {
@@ -846,68 +782,8 @@ def generate_assessment(request, conv_id: int):
         VoiceConversation.objects.select_related("interview_form"), id=conv_id
     )
 
-    logger.info(
-        f"[GENERATE] Conversation {conv_id}, extracted_info: {conversation.extracted_info}"
-    )
-
-    if not conversation.extracted_info:
-        logger.error(f"[GENERATE] No extracted_info for conversation {conv_id}")
-        return json_fail(
-            "No user data available. Please complete the voice interview first.",
-            status=400,
-        )
-
-    interview_form = conversation.interview_form
-    if not interview_form:
-        logger.error("[GENERATE] Conversation %s missing interview reference", conv_id)
-        return json_fail(
-            "Interview reference missing. Please create a new voice interview from the builder.",
-            status=400,
-        )
-
-    # Get role from interview form
-    role = (interview_form.role or interview_form.title or "").strip()
-    target_count = TARGET_ASSESSMENT_QUESTIONS
-
-    generator = RoleQuestionGenerator()
-    style_examples = interview_form.question_texts()[: target_count * 2]
-    questions_list = generator.generate(
-        role,
-        style_examples or None,
-        count=target_count,
-    )
-    questions_list = [q.strip() for q in questions_list if q and q.strip()]
-
-    if len(questions_list) < target_count:
-        logger.warning(
-            "[GENERATE] Primary question generation returned %d/%d prompts for role '%s'. Retrying without examples.",
-            len(questions_list),
-            target_count,
-            role,
-        )
-        retry_questions = generator.generate(role, None, count=target_count)
-        retry_questions = [q.strip() for q in retry_questions if q and q.strip()]
-        if len(retry_questions) >= target_count:
-            questions_list = retry_questions
-
-    if len(questions_list) < target_count:
-        logger.error("[GENERATE] Unable to assemble assessment questions for role: %s", role)
-        return json_fail(
-            "Could not generate assessment questions. Please adjust your interview questions and try again.",
-            status=500,
-        )
-
-    assessment = TechnicalAssessment.objects.create(
-        conversation=conversation,
-        interview_form=interview_form,
-    )
-    assessment.append_questions(questions_list)
-    assessment.save(update_fields=["question_schema", "updated_at"])
-    logger.info(
-        "[GENERATE] Assessment %s created with %d role-based questions for role '%s'",
-        assessment.id,
-        len(questions_list),
-        role,
+    assessment, questions_list = AssessmentFlow.generate_for_conversation(
+        conversation, target_count=TARGET_ASSESSMENT_QUESTIONS
     )
 
     # Generate secure URL
@@ -935,18 +811,10 @@ def save_assessment(request, assessment_id: str):
     messages = validate_field(body, "messages", list)
     session_id = body.get("session_id")
 
-    assessment.transcript = messages
-    assessment.save(update_fields=["transcript", "updated_at"])
-
-    logger.info(
-        "[ASSESSMENT:SAVE] assessment=%s session=%s messages=%d",
-        assessment_id,
-        session_id or "-",
-        len(messages),
-    )
+    message_count = AssessmentFlow.save_transcript(assessment, messages, session_id)
 
     return json_ok(
-        {"assessment_id": str(assessment.id), "message_count": len(messages)}
+        {"assessment_id": str(assessment.id), "message_count": message_count}
     )
 
 
@@ -961,66 +829,18 @@ def analyze_assessment(request, assessment_id: str):
     )
     body = safe_json_parse(request.body)
 
-    question_entries = assessment.get_question_entries()
-    logger.info(
-        "[ASSESSMENT:ANALYZE] assessment=%s questions=%d",
-        assessment_id,
-        len(question_entries),
+    result = AssessmentFlow.analyze_answers(
+        assessment,
+        qa_mapping=body.get("qa_mapping"),
     )
-
-    qa_mapping = body.get("qa_mapping")
-
-    if qa_mapping and isinstance(qa_mapping, dict):
-        logger.info(
-            "[ASSESSMENT:ANALYZE] Using direct Q&A mapping (%d entries)",
-            len(qa_mapping),
-        )
-        answers_dict = qa_mapping
-    else:
-        transcript_len = len(assessment.transcript or [])
-        logger.info(
-            "[ASSESSMENT:ANALYZE] Extracting answers from transcript (%d messages)",
-            transcript_len,
-        )
-        extractor = AssessmentExtractor()
-        questions_text = [entry["text"] for entry in question_entries]
-        answers_dict = extractor.extract_answers(assessment.transcript, questions_text)
-
-    # Save answers
-    saved_answers: dict[str, str] = {}
-    answer_sheet, _ = CandidateAnswer.objects.get_or_create(assessment=assessment)
-    answers_map = dict(answer_sheet.answers or {})
-
-    for entry in question_entries:
-        seq_key = f"q{entry['sequence_number']}"
-        question_id = entry["id"]
-        answer_text = (
-            answers_dict.get(seq_key)
-            or answers_dict.get(question_id)
-            or ""
-        )
-        normalized = (answer_text or "").strip() or "NIL"
-        answers_map[question_id] = normalized
-        answers_map[seq_key] = normalized
-        saved_answers[seq_key] = normalized
-        logger.info("[ASSESSMENT:ANALYZE] Saved answer for %s", seq_key)
-
-    answer_sheet.answers = answers_map
-    answer_sheet.save(update_fields=["answers", "updated_at"])
-
-    # Mark assessment as completed
-    assessment.is_completed = True
-    assessment.save(update_fields=["is_completed", "updated_at"])
-
-    logger.info("[ANALYZE] Completed assessment %s", assessment_id)
 
     return json_ok(
         {
             "assessment_id": str(assessment_id),
-            "answers": saved_answers,
+            "answers": result["answers"],
             "completed": True,
-            "total_questions": assessment.total_questions,
-            "answered_questions": assessment.answered_count,
+            "total_questions": result["total_questions"],
+            "answered_questions": result["answered_questions"],
         }
     )
 
@@ -1052,12 +872,7 @@ def view_response(request, conv_id: int):
         qa_pairs = []
         for question in assessment.get_question_entries():
             question_id = question["id"]
-            sequence_key = f"q{question['sequence_number']}"
-            answer_text = (
-                answers.get(question_id)
-                or answers.get(sequence_key)
-                or "NIL"
-            )
+            answer_text = answers.get(question_id) or "NIL"
             qa_pairs.append(
                 {
                     "number": question["sequence_number"],
@@ -1143,16 +958,7 @@ def delete_assessment(request, assessment_id):
     assessment = get_object_or_fail(
         TechnicalAssessment.objects.select_related("conversation"), id=assessment_id
     )
-    conversation = assessment.conversation
-    assessment.delete()
-
-    remaining = conversation.assessments.count()
-    logger.info(
-        "[ASSESSMENT] Deleted assessment %s (conversation=%s remaining=%d)",
-        assessment_id,
-        conversation.id,
-        remaining,
-    )
+    conversation, remaining = AssessmentFlow.delete_assessment(assessment)
 
     return json_ok(
         {

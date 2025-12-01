@@ -296,7 +296,7 @@ class TechnicalAssessment(QuestionListMixin, models.Model):
             entry = {
                 "number": question["sequence_number"],
                 "question": question["text"],
-                "answer": answers.get(question["id"]) or answers.get(str(question["sequence_number"])) or "NIL",
+                "answer": answers.get(question["id"]) or "NIL",
             }
             entries.append(entry)
         return entries
@@ -321,7 +321,7 @@ class CandidateAnswer(models.Model):
     answers = models.JSONField(
         default=dict,
         blank=True,
-        help_text="Question ID/sequence mapped to normalized answer text",
+        help_text="Question ID mapped to normalized answer text",
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
