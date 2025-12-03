@@ -1,14 +1,27 @@
-.responses-layout {
-    --layout-columns: 1fr;
-}
+    /* ==============================================
+    RESPONSES.CSS
+    ============================================== */
 
-.interview-card-grid {
+    /* ----------------------------------------------
+    1. LAYOUT
+    ---------------------------------------------- */
+    .responses-layout {
+    --layout-columns: 1fr;
+    }
+
+    /* ----------------------------------------------
+    2. INTERVIEW CARD GRID
+    ---------------------------------------------- */
+    .interview-card-grid {
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
-}
+    }
 
-.interview-card {
+    /* ----------------------------------------------
+    3. INTERVIEW CARD
+    ---------------------------------------------- */
+    .interview-card {
     border: 1px solid var(--border);
     border-radius: 20px;
     background: #fff;
@@ -17,42 +30,59 @@
     display: flex;
     flex-direction: column;
     gap: 1.25rem;
-}
+    }
 
-.interview-card-head {
+    .interview-card.unattached {
+    background: #fffdf7;
+    }
+
+    /* ----------------------------------------------
+    4. INTERVIEW CARD HEAD
+    ---------------------------------------------- */
+    .interview-card-head {
     display: flex;
     justify-content: space-between;
     gap: 1rem;
     flex-wrap: wrap;
     border-bottom: 1px solid var(--border);
     padding-bottom: 1rem;
-}
+    }
 
-.interview-card.unattached {
-    background: #fffdf7;
-}
+    .interview-headline h2 {
+    margin: 0;
+    }
 
-.voice-actions {
+    /* ----------------------------------------------
+    5. INTERVIEW ACTIONS
+    Ensures Start Interview, Manage Template, Delete
+    all share consistent sizing and shape
+    ---------------------------------------------- */
+    .interview-actions {
     display: flex;
     gap: 0.75rem;
     flex-wrap: wrap;
     align-items: center;
-}
+    }
 
-.voice-actions .control-btn {
-    min-width: 0;
-}
+    .interview-actions .control-btn {
+    border-radius: 10px;
+    padding: 0.65rem 1.4rem;
+    font-size: 0.95rem;
+    }
 
-.section-pill-list {
+    /* ----------------------------------------------
+    6. SECTION PILLS
+    ---------------------------------------------- */
+    .section-pill-list {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 0.75rem;
     list-style: none;
     margin: 0;
     padding: 0;
-}
+    }
 
-.section-pill {
+    .section-pill {
     border: 1px solid var(--border);
     border-radius: 12px;
     padding: 0.65rem 0.85rem;
@@ -60,51 +90,63 @@
     display: flex;
     flex-direction: column;
     gap: 0.2rem;
-}
+    }
 
-.section-pill.empty {
+    .section-pill.empty {
     text-align: center;
     color: var(--muted);
     font-style: italic;
-}
+    }
 
-.pill-title {
+    .pill-title {
     font-weight: 600;
-}
+    }
 
-.pill-meta {
+    .pill-meta {
     font-size: 0.85rem;
     color: var(--muted);
-}
+    }
 
-.card-footer {
+    /* ----------------------------------------------
+    7. CARD FOOTER
+    ---------------------------------------------- */
+    .card-footer {
     display: flex;
     justify-content: flex-end;
-}
+    }
 
-.responses-collapse[hidden] {
-    display: none;
-}
-
-.responses-collapse {
+    /* ----------------------------------------------
+    8. RESPONSES COLLAPSE
+    ---------------------------------------------- */
+    .responses-collapse {
     border-top: 1px solid var(--border);
     padding-top: 1rem;
-}
+    }
 
-.responses-list {
+    .responses-collapse[hidden] {
+    display: none;
+    }
+
+    /* ----------------------------------------------
+    9. RESPONSES LIST
+    ---------------------------------------------- */
+    .responses-list {
     list-style: none;
     margin: 0;
     padding: 0;
     display: flex;
     flex-direction: column;
     gap: 1.25rem;
-}
+    }
 
-.responses-list.compact {
+    .responses-list.compact {
     gap: 0.85rem;
-}
+    }
 
-.response-container {
+    /* ----------------------------------------------
+    10. RESPONSE CONTAINER
+    ---------------------------------------------- */
+    .response-container {
     background: var(--panel-muted);
     border: 1px solid rgba(15, 130, 140, 0.15);
     border-radius: 16px;
@@ -112,109 +154,157 @@
     display: flex;
     flex-direction: column;
     gap: 1rem;
-}
+    }
 
-.responses-list.compact .response-container {
+    .responses-list.compact .response-container {
     padding: 1rem;
-}
+    }
 
-.response-meta {
+    /* ----------------------------------------------
+    11. RESPONSE META
+    ---------------------------------------------- */
+    .response-meta {
     display: flex;
     gap: 1.5rem;
     flex-wrap: wrap;
-}
+    }
 
-.meta-row {
+    .meta-row {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
-}
+    }
 
-.meta-label {
+    .meta-label {
     font-size: 0.82rem;
     color: var(--muted);
     text-transform: uppercase;
     letter-spacing: 0.08em;
-}
+    }
 
-.meta-value {
+    .meta-value {
     font-weight: 600;
-}
+    }
 
-.response-data {
+    /* ----------------------------------------------
+    12. RESPONSE DATA
+    ---------------------------------------------- */
+    .response-data {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
     border-top: 1px solid var(--border);
     padding-top: 0.75rem;
-}
+    }
 
-.response-fields {
+    /* ----------------------------------------------
+    13. RESPONSE FIELDS
+    ---------------------------------------------- */
+    .response-fields {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 0.75rem;
-}
+    }
 
-.response-fields.narrow {
+    .response-fields.narrow {
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-}
+    }
 
-.response-field {
+    .response-field {
     padding: 0.85rem;
     border-radius: 12px;
-    background: var(--panel-muted);
+    background: #fff;
     border: 1px solid rgba(15, 130, 140, 0.12);
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
-}
+    }
 
-.response-key {
+    .response-key {
     font-size: 0.85rem;
     letter-spacing: 0.05em;
     color: var(--muted);
     text-transform: uppercase;
-}
+    }
 
-.response-value.value-empty {
+    .response-value {
+    color: var(--text);
+    }
+
+    .response-value.value-empty {
     color: var(--muted);
-}
+    font-style: italic;
+    }
 
-.response-value.value-provided {
+    .response-value.value-provided {
     font-weight: 600;
-}
+    }
 
-.response-actions {
+    /* ----------------------------------------------
+    14. RESPONSE ACTIONS
+    ---------------------------------------------- */
+    .response-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 0.75rem;
-}
+    }
 
-.empty-state {
+    .response-actions .control-btn {
+    min-width: 80px;
+    }
+
+    /* ----------------------------------------------
+    15. EMPTY STATES
+    ---------------------------------------------- */
+    .empty-state {
     padding: 2rem;
     border-radius: 18px;
     border: 1px dashed var(--border);
     background: var(--panel-muted);
     text-align: center;
     color: var(--muted);
-}
+    }
 
-.muted-text.small {
-    font-size: 0.9rem;
-}
-
-.muted-text.tiny {
-    font-size: 0.8rem;
-}
-
-.empty-state.compact {
+    .empty-state.compact {
     padding: 1.5rem;
     border-style: solid;
     background: #fff;
-}
+    }
 
-/* Modal styling */
-.modal {
+    .empty-state h3 {
+    margin: 0 0 0.5rem;
+    color: var(--text);
+    }
+
+    .empty-state p {
+    margin: 0 0 1rem;
+    }
+
+    /* ----------------------------------------------
+    16. UTILITY CLASSES
+    ---------------------------------------------- */
+    .muted-text.small {
+    font-size: 0.9rem;
+    }
+
+    .muted-text.tiny {
+    font-size: 0.8rem;
+    }
+
+    .warning-text {
+    font-weight: 600;
+    margin: 0 0 0.35rem;
+    color: var(--text);
+    }
+
+    /* ==============================================
+    MODAL SYSTEM
+    ============================================== */
+
+    /* ----------------------------------------------
+    17. MODAL OVERLAY
+    ---------------------------------------------- */
+    .modal {
     position: fixed;
     inset: 0;
     background: rgba(13, 18, 30, 0.65);
@@ -223,13 +313,16 @@
     justify-content: center;
     z-index: 80;
     padding: 1rem;
-}
+    }
 
-.modal.active {
+    .modal.active {
     display: flex;
-}
+    }
 
-.modal-content {
+    /* ----------------------------------------------
+    18. MODAL CONTENT
+    ---------------------------------------------- */
+    .modal-content {
     background: #fff;
     border-radius: 24px;
     padding: 1.75rem;
@@ -239,129 +332,200 @@
     flex-direction: column;
     gap: 1rem;
     box-shadow: 0 25px 65px rgba(15, 130, 140, 0.25);
-}
+    }
 
-.modal-small {
+    .modal-content.modal-small {
     width: min(420px, 94vw);
-}
+    }
 
-.modal-header {
+    /* ----------------------------------------------
+    19. MODAL HEADER
+    ---------------------------------------------- */
+    .modal-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    gap: 0.5rem;
-}
+    align-items: center;
+    gap: 0.75rem;
+    }
 
-.modal-header h2 {
+    .modal-header h2 {
     margin: 0;
     font-size: 1.4rem;
-}
+    }
 
-.modal-close {
+    /* X close button in header */
+    button.modal-close[aria-label="Close"] {
     border: none;
     background: rgba(0, 0, 0, 0.04);
     color: var(--muted);
-    border-radius: 999px;
-    width: 32px;
-    height: 32px;
-    font-size: 1.2rem;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    font-size: 1.4rem;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-}
+    transition: background 0.2s ease, color 0.2s ease;
+    flex-shrink: 0;
+    line-height: 1;
+    }
 
-.modal-body {
+    button.modal-close[aria-label="Close"]:hover,
+    button.modal-close[aria-label="Close"]:focus-visible {
+    background: rgba(0, 0, 0, 0.08);
+    color: var(--text);
+    outline: none;
+    }
+
+    /* ----------------------------------------------
+    20. MODAL BODY
+    ---------------------------------------------- */
+    .modal-body {
     flex: 1;
     overflow-y: auto;
     padding-right: 0.5rem;
-}
+    }
 
-.modal-form {
+    .modal-body p {
+    margin: 0 0 0.5rem;
+    }
+
+    /* ----------------------------------------------
+    21. MODAL FORM
+    ---------------------------------------------- */
+    .modal-form {
     display: flex;
     flex-direction: column;
     gap: 1rem;
-}
+    }
 
-.form-field-grid {
+    .form-field-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 1rem;
-}
+    }
 
-.modal-form .form-field {
+    .modal-form .form-field {
     display: flex;
     flex-direction: column;
     gap: 0.35rem;
-    font-size: 0.95rem;
-    color: var(--muted);
-}
+    }
 
-.modal-form .form-field span {
+    .modal-form .form-field span {
+    font-size: 0.9rem;
     font-weight: 600;
+    color: var(--muted);
     text-transform: capitalize;
-}
+    }
 
-.modal-form .form-field input {
+    .modal-form .form-field input {
     border-radius: 10px;
     border: 1px solid var(--border);
     background: var(--panel-muted);
     padding: 0.75rem;
     font-size: 1rem;
-    transition: border 0.2s ease, box-shadow 0.2s ease;
-}
+    color: var(--text);
+    transition: border 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    }
 
-.modal-form .form-field input:focus {
+    .modal-form .form-field input:focus {
     outline: none;
     border-color: var(--accent);
-    box-shadow: 0 0 0 2px rgba(15, 130, 140, 0.12);
+    box-shadow: 0 0 0 3px rgba(15, 130, 140, 0.12);
     background: #fff;
-}
+    }
 
-.modal-footer {
+    /* ----------------------------------------------
+    22. MODAL FOOTER
+    Consistent button styling:
+    - Primary: accent background (Save, main action)
+    - Secondary: neutral/muted (Cancel, dismiss)
+    - Danger: red (Delete)
+    ---------------------------------------------- */
+    .modal-footer {
     display: flex;
     justify-content: flex-end;
     gap: 0.75rem;
-    padding-top: 0.75rem;
-    border-top: 1px solid rgba(0, 0, 0, 0.05);
-}
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    }
 
-.modal-footer .control-btn {
-    min-width: 120px;
+    .modal-footer .control-btn {
+    min-width: 100px;
     justify-content: center;
-    border-radius: 999px;
-}
+    border-radius: 10px;
+    padding: 0.65rem 1.25rem;
+    font-weight: 600;
+    }
 
-/* Secondary modal button now mirrors primary styling */
-.modal-footer .control-btn.secondary {
+    /* Primary button - main action (Save, Submit, Close on view-only modals) */
+    .modal-footer .control-btn.primary {
     background: var(--accent);
     color: #fff;
     border-color: var(--accent);
-    box-shadow: 0 8px 16px rgba(15, 130, 140, 0.2);
-    font-weight: 500;
-}
+    box-shadow: 0 4px 12px rgba(15, 130, 140, 0.25);
+    }
 
-.modal-footer .control-btn.secondary:hover,
-.modal-footer .control-btn.secondary:focus-visible {
+    .modal-footer .control-btn.primary:hover,
+    .modal-footer .control-btn.primary:focus-visible {
     background: var(--accent-dark);
     border-color: var(--accent-dark);
+    outline: none;
+    }
+
+    /* Secondary button - dismissive action (Cancel) */
+    .modal-footer .control-btn.secondary {
+    background: var(--panel-muted);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    box-shadow: none;
+    }
+
+    .modal-footer .control-btn.secondary:hover,
+    .modal-footer .control-btn.secondary:focus-visible {
+    background: #fff;
+    color: var(--text);
+    border-color: var(--text);
+    outline: none;
+    }
+
+    /* Danger button - destructive action (Delete) */
+    .modal-footer .control-btn.danger {
+    background: var(--danger);
     color: #fff;
-}
+    border-color: var(--danger);
+    box-shadow: 0 4px 12px rgba(217, 83, 79, 0.25);
+    }
 
-.modal-footer .control-btn.primary {
-    border-radius: 999px;
-    font-weight: 500;
-    box-shadow: 0 8px 16px rgba(15, 130, 140, 0.2);
-}
+    .modal-footer .control-btn.danger:hover,
+    .modal-footer .control-btn.danger:focus-visible {
+    background: #c9302c;
+    border-color: #c9302c;
+    outline: none;
+    }
 
-.warning-text {
-    font-weight: 600;
-    margin-bottom: 0.35rem;
-}
+    /* ==============================================
+    RESPONSIVE STYLES
+    ============================================== */
 
-@media (max-width: 720px) {
+    @media (max-width: 720px) {
+    .interview-card-head {
+        flex-direction: column;
+    }
+
+    .interview-actions {
+        width: 100%;
+    }
+
+    .interview-actions .control-btn {
+        flex: 1;
+        min-width: 0;
+    }
+
     .response-meta {
         flex-direction: column;
+        gap: 1rem;
     }
 
     .response-fields {
@@ -371,4 +535,29 @@
     .response-actions {
         flex-direction: column;
     }
-}
+
+    .response-actions .control-btn {
+        width: 100%;
+    }
+
+    .form-field-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .modal-content {
+        padding: 1.25rem;
+        border-radius: 20px;
+    }
+
+    .modal-header h2 {
+        font-size: 1.25rem;
+    }
+
+    .modal-footer {
+        flex-direction: column-reverse;
+    }
+
+    .modal-footer .control-btn {
+        width: 100%;
+    }
+    }
