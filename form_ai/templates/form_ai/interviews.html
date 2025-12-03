@@ -117,7 +117,7 @@
             {% if interviews %}
             <div class="interview-list">
                 {% for interview in interviews %}
-                <article class="interview-card" data-interview-id="{{ interview.id }}">
+                <article class="interview-card" id="interview-{{ interview.id }}" data-interview-id="{{ interview.id }}">
                     <header>
                         <h3>{{ interview.title }}</h3>
                     </header>
