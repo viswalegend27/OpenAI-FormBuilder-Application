@@ -6,6 +6,7 @@ import logging
 from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
 from django.db import transaction
+from django.utils import timezone
 
 from .helper.views_helper import AppError
 from .models import InterviewForm, VoiceConversation, build_question_entry
@@ -253,7 +254,8 @@ class ConversationFlow:
     @staticmethod
     def apply_analysis(conversation: VoiceConversation, extracted_data: Mapping[str, Any]) -> VoiceConversation:
         conversation.extracted_info = dict(extracted_data or {})
-        conversation.save(update_fields=["extracted_info", "updated_at"])
+        conversation.updated_at = timezone.now()
+        conversation.save(update_fields=["updated_at"])
         logger.info(
             "[FLOW:CONVERSATION] Analysis saved for %s with fields: %s",
             conversation.pk,

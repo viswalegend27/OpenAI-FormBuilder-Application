@@ -152,9 +152,8 @@ class VoiceConversation(models.Model):
     """
     Stores voice conversation data from user interactions.
 
-    JSONB Fields:
+    JSON Fields:
         - messages: List of conversation messages
-        - extracted_info: {name, qualification, experience}
     """
 
     interview_form = models.ForeignKey(
@@ -173,11 +172,6 @@ class VoiceConversation(models.Model):
         help_text="Unique session identifier",
     )
     messages = models.JSONField(default=list, help_text="Raw conversation messages")
-    extracted_info = models.JSONField(
-        default=dict,
-        blank=True,
-        help_text="Extracted user data: {name, qualification, experience}",
-    )
     created_at = models.DateTimeField(default=timezone.now, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -201,5 +195,54 @@ class VoiceConversation(models.Model):
     @property
     def candidate_experience(self):
         return self.extracted_info.get("experience", "")
+
+    @property
+    def extracted_info(self) -> dict:
+        response = getattr(self, "interview_response", None)
+        return dict(response.data or {}) if response else {}
+
+    def set_extracted_info(self, payload: dict | None) -> None:
+        response, _ = InterviewResponse.objects.get_or_create(
+            conversation=self,
+            defaults={
+                "interview_form": self.interview_form,
+                "data": {},
+            },
+        )
+        response.interview_form = self.interview_form
+        response.data = dict(payload or {})
+        response.save(update_fields=["data", "interview_form", "updated_at"])
+
+    @extracted_info.setter
+    def extracted_info(self, value: dict | None) -> None:
+        self.set_extracted_info(value)
+
+
+class InterviewResponse(models.Model):
+    """Extracted response payload for a conversation."""
+
+    conversation = models.OneToOneField(
+        VoiceConversation,
+        on_delete=models.CASCADE,
+        related_name="interview_response",
+    )
+    interview_form = models.ForeignKey(
+        InterviewForm,
+        on_delete=models.CASCADE,
+        related_name="responses",
+        null=True,
+        blank=True,
+    )
+    data = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "interview_responses"
+        verbose_name = "Interview Response"
+        verbose_name_plural = "Interview Responses"
+
+    def __str__(self):
+        return f"Response for conversation {self.conversation_id}"
 
 

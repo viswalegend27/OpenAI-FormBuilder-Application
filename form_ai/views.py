@@ -9,6 +9,7 @@ from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST, require_http_methods
+from django.utils import timezone
 
 from . import constants as C
 from .helper.views_helper import AppError, json_ok
@@ -554,9 +555,9 @@ def create_voice_invite(request, interview_id: str):
 def view_responses(request):
     """Display all conversation responses in a list view."""
     conversations_queryset = (
-        VoiceConversation.objects.filter(extracted_info__isnull=False)
-        .exclude(extracted_info={})
-        .select_related("interview_form")
+        VoiceConversation.objects.filter(interview_response__isnull=False)
+        .exclude(interview_response__data={})
+        .select_related("interview_form", "interview_response")
     )
 
     conversations = list(conversations_queryset)
@@ -758,7 +759,7 @@ def analyze_conversation(request):
 def view_response(request, conv_id: int):
     """View full response details for a conversation."""
     conversation = get_object_or_fail(
-        VoiceConversation.objects.select_related("interview_form"),
+        VoiceConversation.objects.select_related("interview_form", "interview_response"),
         id=conv_id,
     )
 
@@ -796,7 +797,8 @@ def edit_response(request, conv_id: int):
     user_response = validate_field(body, "user_response", dict)
 
     conversation.extracted_info = user_response
-    conversation.save(update_fields=["extracted_info", "updated_at"])
+    conversation.updated_at = timezone.now()
+    conversation.save(update_fields=["updated_at"])
 
     logger.info("[RESPONSES] Updated conversation %s", conv_id)
 
