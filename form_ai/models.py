@@ -1,7 +1,6 @@
 # models.py
 
 import uuid
-from typing import Any
 
 from django.db import models
 from django.utils import timezone
@@ -183,18 +182,6 @@ class VoiceConversation(models.Model):
 
     def __str__(self):
         return f"Conversation #{self.pk} - {self.created_at:%Y-%m-%d %H:%M}"
-
-    @property
-    def candidate_name(self):
-        return self.extracted_info.get("name", "")
-
-    @property
-    def candidate_qualification(self):
-        return self.extracted_info.get("qualification", "")
-
-    @property
-    def candidate_experience(self):
-        return self.extracted_info.get("experience", "")
 
     @property
     def extracted_info(self) -> dict:
