@@ -506,7 +506,9 @@ def interview_builder(request):
         interviews = list(InterviewForm.objects.order_by("-updated_at"))
 
     for interview in interviews:
-        interview.question_rows = interview.get_question_entries()
+        entries = interview.get_question_entries()
+        interview.question_rows = entries
+        interview.question_sections = InterviewFlow.to_section_groups(entries)
     print(f"[INTERVIEW_BUILDER] Loaded {len(interviews)} interviews")
 
     return render(
@@ -515,6 +517,7 @@ def interview_builder(request):
         {
             "interviews": interviews,
             "existing_count": len(interviews),
+            "required_section": InterviewFlow.required_section_template(),
         },
     )
 
@@ -553,16 +556,44 @@ def view_responses(request):
         VoiceConversation.objects.filter(extracted_info__isnull=False)
         .exclude(extracted_info={})
         .select_related("interview_form")
-        .prefetch_related("assessments", "assessments__answer_sheet")
     )
 
     conversations = list(conversations_queryset)
     for conversation in conversations:
         conversation.display_fields = build_display_fields(conversation)
-        for assessment in conversation.assessments.all():
-            assessment.qa_preview = assessment.get_qa_pairs()
 
-    return render(request, "form_ai/responses.html", {"conversations": conversations})
+    interview_map: Dict[str | None, list[VoiceConversation]] = {}
+    for conversation in conversations:
+        key = str(conversation.interview_form.id) if conversation.interview_form else None
+        interview_map.setdefault(key, []).append(conversation)
+
+    interviews = list(InterviewForm.objects.order_by("-updated_at"))
+    interview_groups: list[dict[str, Any]] = []
+    for interview in interviews:
+        interview_groups.append(
+            {
+                "interview": interview,
+                "responses": interview_map.get(str(interview.id), []),
+                "voice_url": request.build_absolute_uri(
+                    reverse("voice_page", args=[interview.id])
+                ),
+            }
+        )
+
+    unassigned_responses = interview_map.get(None, [])
+    latest_response = conversations[0].created_at if conversations else None
+
+    return render(
+        request,
+        "form_ai/responses.html",
+        {
+            "interview_groups": interview_groups,
+            "unassigned_responses": unassigned_responses,
+            "interview_count": len(interviews),
+            "response_count": len(conversations),
+            "latest_response": latest_response,
+        },
+    )
 
 
 def conduct_assessment(request, token: str):
@@ -643,12 +674,12 @@ def create_interview(request):
     if not title or not title.strip():
         raise AppError("Interview title is required", status=400)
 
-    questions = validate_field(body, "questions", list)
+    sections = validate_field(body, "sections", list)
     interview = InterviewFlow.create_form(
         title=title,
         summary=body.get("summary") or "",
         ai_prompt=body.get("ai_prompt") or "",
-        questions=questions,
+        sections=sections,
     )
 
     redirect_path = reverse("voice_page", args=[interview.id])

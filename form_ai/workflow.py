@@ -8,20 +8,54 @@ from typing import Any, Dict, Iterable, List, Mapping, Tuple
 from django.db import transaction
 
 from .helper.views_helper import AppError
-from .models import CandidateAnswer, InterviewForm, TechnicalAssessment, VoiceConversation
+from .models import (
+    CandidateAnswer,
+    InterviewForm,
+    TechnicalAssessment,
+    VoiceConversation,
+    build_question_entry,
+)
 from .views_schema_ import AssessmentExtractor, RoleQuestionGenerator
 
 logger = logging.getLogger(__name__)
 
 # Auto-generated starter interview template used when the workspace is empty.
+REQUIRED_SECTION_TITLE = "Candidate Basics"
+REQUIRED_QUESTIONS = [
+    {
+        "text": "To start, could you please share your full name as you'd like it recorded?",
+        "field_key": "name",
+    },
+    {
+        "text": "What is your highest qualification and in which year did you graduate?",
+        "field_key": "qualification",
+    },
+    {
+        "text": "How many years of relevant experience do you have in the field you are applying for?",
+        "field_key": "experience",
+    },
+]
+
 STARTER_INTERVIEW_TEMPLATE = {
     "title": "Sample Interview Plan",
     "summary": "Starter interview generated automatically. Update it to match your role.",
     "ai_prompt": "",
-    "questions": [
-        "Can you introduce yourself and share your current focus area?",
-        "Tell me about a recent project that best represents your strengths.",
-        "What tools or languages are you most comfortable working with right now?",
+    "sections": [
+        {
+            "title": "Projects",
+            "questions": [
+                "Walk me through a project where you had to solve a complex problem.",
+                "What part of that project are you most proud of?",
+                "How did you collaborate with your team during this project?",
+            ],
+        },
+        {
+            "title": "Technical Depth",
+            "questions": [
+                "Which technologies are you most comfortable with today?",
+                "Tell me about a debugging challenge that taught you something new.",
+            ],
+        },
     ],
 }
 
@@ -35,28 +69,30 @@ class InterviewFlow:
         title: str,
         summary: str = "",
         ai_prompt: str = "",
-        questions: Iterable[str],
+        sections: Iterable[Mapping[str, Any]] | None,
     ) -> InterviewForm:
         title_value = (title or "").strip()
         if not title_value:
             raise AppError("Interview title is required", status=400)
-        cleaned_questions = [
-            str(item).strip() for item in questions if isinstance(item, str) and item.strip()
-        ]
-        if not cleaned_questions:
-            raise AppError("Add at least one interview question", status=400)
+
+        custom_sections = InterviewFlow._normalize_sections(sections)
+        custom_entries = InterviewFlow._build_section_entries(custom_sections)
+        if not custom_entries:
+            raise AppError("Add at least one interview question section", status=400)
+
+        question_entries = InterviewFlow._build_required_entries() + custom_entries
 
         interview = InterviewForm.objects.create(
             title=title_value,
             summary=(summary or "").strip(),
             ai_prompt=(ai_prompt or "").strip(),
         )
-        interview.append_questions(cleaned_questions)
+        interview.set_question_entries(question_entries)
         interview.save(update_fields=["question_schema", "updated_at"])
         logger.info(
             "[FLOW:INTERVIEW] Created interview %s with %d questions",
             interview.id,
-            len(cleaned_questions),
+            len(question_entries),
         )
         return interview
 
@@ -89,6 +125,14 @@ class InterviewFlow:
                 status=400,
             )
 
+        entry = next((item for item in questions if str(item["id"]) == str(question_id)), None)
+        if not entry:
+            raise AppError("Question not found on this interview", status=404)
+
+        metadata = entry.get("metadata") or {}
+        if metadata.get("locked"):
+            raise AppError("Required onboarding questions cannot be removed", status=400)
+
         if not form.remove_question(question_id):
             raise AppError("Question not found on this interview", status=404)
 
@@ -103,6 +147,79 @@ class InterviewFlow:
         return remaining
 
     @staticmethod
+    def required_section_template() -> Dict[str, Any]:
+        """Return a serializable definition of the protected basics section."""
+        return {
+            "title": REQUIRED_SECTION_TITLE,
+            "locked": True,
+            "questions": [item["text"] for item in REQUIRED_QUESTIONS],
+        }
+
+    @staticmethod
+    def to_section_groups(entries: Iterable[Mapping[str, Any]]) -> List[Dict[str, Any]]:
+        """Group flat question entries by their section metadata."""
+        sections: Dict[str, Dict[str, Any]] = {}
+        for entry in entries:
+            metadata = entry.get("metadata") or {}
+            section_title = metadata.get("section") or "Questions"
+            bucket = sections.setdefault(
+                section_title,
+                {
+                    "title": section_title,
+                    "locked": bool(metadata.get("locked")),
+                    "questions": [],
+                },
+            )
+            bucket["questions"].append(entry)
+        return list(sections.values())
+
+    @staticmethod
+    def _normalize_sections(sections: Iterable[Mapping[str, Any]] | None) -> List[Dict[str, Any]]:
+        normalized: List[Dict[str, Any]] = []
+        if not sections:
+            return normalized
+
+        for section in sections:
+            if not isinstance(section, Mapping):
+                continue
+            title = str(section.get("title") or "").strip()
+            questions = section.get("questions")
+            if isinstance(questions, (str, bytes)) or not isinstance(questions, Iterable):
+                continue
+            cleaned_questions = []
+            for question in questions:
+                if isinstance(question, str):
+                    text = question.strip()
+                else:
+                    text = str(question or "").strip()
+                if text:
+                    cleaned_questions.append(text)
+            if cleaned_questions:
+                normalized.append({"title": title or "Untitled section", "questions": cleaned_questions})
+        return normalized
+
+    @staticmethod
+    def _build_required_entries() -> List[Dict[str, Any]]:
+        entries: List[Dict[str, Any]] = []
+        for item in REQUIRED_QUESTIONS:
+            metadata = {
+                "section": REQUIRED_SECTION_TITLE,
+                "locked": True,
+                "field_key": item.get("field_key"),
+            }
+            entries.append(build_question_entry(item["text"], metadata=metadata))
+        return entries
+
+    @staticmethod
+    def _build_section_entries(sections: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        entries: List[Dict[str, Any]] = []
+        for section in sections:
+            for text in section["questions"]:
+                metadata = {"section": section["title"]}
+                entries.append(build_question_entry(text, metadata=metadata))
+        return entries
+
+    @staticmethod
     def ensure_seed_interview() -> InterviewForm | None:
         """Create a starter interview when none exist so the UI always has content."""
         if InterviewForm.objects.exists():
@@ -114,7 +231,7 @@ class InterviewFlow:
                 title=template["title"],
                 summary=template.get("summary", ""),
                 ai_prompt=template.get("ai_prompt", ""),
-                questions=template["questions"],
+                sections=template.get("sections"),
             )
             logger.info("[FLOW:INTERVIEW] Seeded starter interview %s", interview.id)
             return interview

@@ -26,152 +26,132 @@
 
     <header class="hero">
         <div>
-            <p class="eyebrow">Recent Conversations</p>
-            <h1>Interview Responses</h1>
-            <p class="subtitle">Review transcripts, edit captured data, and trigger assessments in one workspace.</p>
+            <p class="eyebrow">Interview Console</p>
+            <h1>Voice Responses</h1>
+            <p class="subtitle">Preview each interview template, jump into the voice assistant, and review captured information.</p>
         </div>
         <div class="hero-meta">
             <div>
-                <p class="meta-label">Responses logged</p>
-                <p class="meta-value">{{ conversations|length }}</p>
+                <p class="meta-label">Interviews configured</p>
+                <p class="meta-value">{{ interview_count }}</p>
             </div>
             <div>
-                <p class="meta-label">Latest update</p>
-                <p class="meta-value">
-                    {% with latest=conversations|first %}
-                        {% if latest %}{{ latest.created_at|date:"M d, Y" }}{% else %}-{% endif %}
-                    {% endwith %}
-                </p>
+                <p class="meta-label">Responses logged</p>
+                <p class="meta-value">{{ response_count }}</p>
+            </div>
+            <div>
+                <p class="meta-label">Latest response</p>
+                <p class="meta-value">{% if latest_response %}{{ latest_response|date:"M d, Y" }}{% else %}-{% endif %}</p>
             </div>
         </div>
     </header>
 
     <main class="layout layout-single responses-layout">
 
-        {% if conversations %}
-        <ul class="responses-list">
-            {% for conv in conversations %}
-            <li class="response-container" data-conv-id="{{ conv.id }}">
-
-                <div class="response-meta">
-                    <div class="meta-row">
-                        <span class="meta-label">#{{ forloop.counter }}</span>
-                        <span class="meta-value">{{ conv.created_at|date:"M d, Y - H:i" }}</span>
+        {% if interview_groups %}
+        <div class="interview-response-grid">
+            {% for block in interview_groups %}
+            <section class="interview-response-card">
+                <div class="interview-card-header">
+                    <div>
+                        <p class="eyebrow">Interview</p>
+                        <h2>{{ block.interview.title }}</h2>
+                        <p class="muted-text">{{ block.interview.summary|default:"No summary added yet." }}</p>
                     </div>
-                    {% if conv.interview_form %}
-                    <div class="meta-row">
-                        <span class="meta-label">Interview</span>
-                        <span class="meta-value">{{ conv.interview_form.title }}</span>
-                    </div>
-                    {% endif %}
-                </div>
-
-                {% if conv.display_fields %}
-                <div class="response-data">
-                    <strong>Candidate Information</strong>
-                    <div class="response-fields">
-                        {% for field in conv.display_fields %}
-                        <div class="response-field">
-                            <span class="response-key">{{ field.label }}</span>
-                            <span class="response-value {% if field.value %}value-provided{% else %}value-empty{% endif %}">
-                                {{ field.value|default:"Not provided" }}
-                            </span>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% endif %}
-
-                <div class="response-actions">
-                    <div class="actions-row">
-                        <button class="control-btn view-btn" data-conv-id="{{ conv.id }}"
-                            title="View full details">View</button>
-                        <button class="control-btn edit-btn" data-conv-id="{{ conv.id }}"
-                            title="Edit information">Edit</button>
-                        <button class="control-btn danger delete-btn" data-conv-id="{{ conv.id }}"
-                            title="Delete response">Delete</button>
-                    </div>
-
-                    {% with assessment_count=conv.assessments.count %}
-                    <div class="actions-row actions-row-secondary" data-actions-conv-id="{{ conv.id }}">
-                        <button class="control-btn primary generate-assessment-btn"
-                            data-conv-id="{{ conv.id }}">Generate Assessment</button>
-                        {% if assessment_count %}
-                        <button class="control-btn secondary view-assessments-btn"
-                            data-conv-id="{{ conv.id }}" data-assessment-count="{{ assessment_count }}">
-                            View Assessments ({{ assessment_count }})
+                    <div class="voice-actions">
+                        <a href="{{ block.voice_url }}" class="control-btn primary">Start Voice Interview</a>
+                        <button
+                            type="button"
+                            class="control-btn ghost copy-link-btn"
+                            data-url="{{ block.voice_url }}">
+                            Copy link
                         </button>
-                        {% endif %}
+                        <span class="voice-link-hint">{{ block.voice_url }}</span>
                     </div>
+                </div>
 
-                    <div class="assessment-url-display" id="url-display-{{ conv.id }}" style="display:none;">
-                        <input type="text" readonly class="url-input" aria-label="Assessment URL" />
-                        <button class="control-btn copy-btn">Copy</button>
-                    </div>
-
-                    {% if assessment_count %}
-                    <div class="assessments-list" id="assessments-{{ conv.id }}" style="display:none;">
-                        {% for assessment in conv.assessments.all %}
-                        <div class="assessment-item" data-assessment-id="{{ assessment.id }}">
-                            <div class="assessment-header">
-                                <div>
-                                    <strong>Created:</strong>
-                                    {{ assessment.created_at|date:"M d, Y - H:i" }}
-                                </div>
-                                <div>
-                                    <strong>Status:</strong>
-                                    <span
-                                        class="status-badge {% if assessment.is_completed %}status-completed{% else %}status-pending{% endif %}">
-                                        {{ assessment.is_completed|yesno:"Completed,Pending" }}
-                                    </span>
-                                </div>
+                {% if block.responses %}
+                <ul class="responses-list">
+                    {% for conv in block.responses %}
+                    <li class="response-container" data-conv-id="{{ conv.id }}">
+                        <div class="response-meta">
+                            <div class="meta-row">
+                                <span class="meta-label">Logged</span>
+                                <span class="meta-value">{{ conv.created_at|date:"M d, Y - H:i" }}</span>
                             </div>
+                            <div class="meta-row">
+                                <span class="meta-label">Session ID</span>
+                                <span class="meta-value">{{ conv.session_id|default:"-" }}</span>
+                            </div>
+                        </div>
 
-                            {% if assessment.qa_preview %}
-                            <div class="assessment-answers">
-                                <strong>Q&A</strong>
-                                {% for pair in assessment.qa_preview %}
-                                <div class="answer-item">
-                                    <div class="question-line">
-                                        <strong>Q{{ pair.number }}:</strong>
-                                        <span class="question-text">{{ pair.question }}</span>
-                                    </div>
-                                    <div class="answer-line">
-                                        {% if pair.answer and pair.answer != "NIL" %}
-                                        <span class="value-provided">{{ pair.answer }}</span>
-                                        {% else %}
-                                        <span class="value-empty">Not answered</span>
-                                        {% endif %}
-                                    </div>
+                        {% if conv.display_fields %}
+                        <div class="response-data">
+                            <strong>Candidate Information</strong>
+                            <div class="response-fields">
+                                {% for field in conv.display_fields %}
+                                <div class="response-field">
+                                    <span class="response-key">{{ field.label }}</span>
+                                    <span class="response-value {% if field.value %}value-provided{% else %}value-empty{% endif %}">
+                                        {{ field.value|default:"Not provided" }}
+                                    </span>
                                 </div>
                                 {% endfor %}
                             </div>
-                            {% endif %}
-                            <div class="assessment-footer">
-                                <button
-                                    class="control-btn danger ghost delete-assessment-btn"
-                                    data-assessment-id="{{ assessment.id }}"
-                                    data-conv-id="{{ conv.id }}">
-                                    Delete assessment
-                                </button>
+                        </div>
+                        {% endif %}
+
+                        <div class="response-actions">
+                            <button class="control-btn view-btn" data-conv-id="{{ conv.id }}" title="View full details">View</button>
+                            <button class="control-btn edit-btn" data-conv-id="{{ conv.id }}" title="Edit information">Edit</button>
+                            <button class="control-btn danger delete-btn" data-conv-id="{{ conv.id }}" title="Delete response">Delete</button>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="empty-state compact">
+                    <p>No responses recorded for this interview yet.</p>
+                    <p class="muted-text">Run the voice assistant to start collecting data.</p>
+                </div>
+                {% endif %}
+            </section>
+            {% endfor %}
+
+            {% if unassigned_responses %}
+            <section class="interview-response-card">
+                <div class="interview-card-header">
+                    <div>
+                        <p class="eyebrow">Unattached</p>
+                        <h2>Responses without an interview</h2>
+                        <p class="muted-text">These sessions were saved without linking to an interview template.</p>
+                    </div>
+                </div>
+                <ul class="responses-list">
+                    {% for conv in unassigned_responses %}
+                    <li class="response-container" data-conv-id="{{ conv.id }}">
+                        <div class="response-meta">
+                            <div class="meta-row">
+                                <span class="meta-label">Logged</span>
+                                <span class="meta-value">{{ conv.created_at|date:"M d, Y - H:i" }}</span>
                             </div>
                         </div>
-                        {% endfor %}
-                    </div>
-                    {% endif %}
-                    {% endwith %}
-
-                </div>
-
-            </li>
-            {% endfor %}
-        </ul>
-
+                        <div class="response-actions">
+                            <button class="control-btn view-btn" data-conv-id="{{ conv.id }}">View</button>
+                            <button class="control-btn edit-btn" data-conv-id="{{ conv.id }}">Edit</button>
+                            <button class="control-btn danger delete-btn" data-conv-id="{{ conv.id }}">Delete</button>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </section>
+            {% endif %}
+        </div>
         {% else %}
         <div class="empty-state">
-            <h3>No Responses Yet</h3>
-            <p>Complete a voice interview to see responses here.</p>
-            <a href="{% url 'interview_builder' %}" class="control-btn primary">Start Interview</a>
+            <h3>No Interviews Yet</h3>
+            <p>Create an interview and run the voice assistant to see responses here.</p>
+            <a href="{% url 'interview_builder' %}" class="control-btn primary">Create interview</a>
         </div>
         {% endif %}
 

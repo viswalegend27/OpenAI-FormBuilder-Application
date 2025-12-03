@@ -89,17 +89,6 @@ class APIService {
         });
     }
 
-    generateAssessment(convId) {
-        return this.request(`/responses/${convId}/generate-assessment/`, {
-            method: 'POST'
-        });
-    }
-
-    deleteAssessment(assessmentId) {
-        return this.request(`/assessments/${assessmentId}/`, {
-            method: 'DELETE'
-        });
-    }
 }
 
 // ============================================================
@@ -213,7 +202,6 @@ class ResponseManager {
         this.toast = toast;
         this.currentEditId = null;
         this.currentDeleteId = null;
-        this.assessmentUrls = new Map();
         this.fieldLabelCache = new Map();
         this.init();
     }
@@ -222,15 +210,10 @@ class ResponseManager {
         this.on('.view-btn', 'click', (e) => this.handleView(e.currentTarget.dataset.convId));
         this.on('.edit-btn', 'click', (e) => this.handleEdit(e.currentTarget.dataset.convId));
         this.on('.delete-btn', 'click', (e) => this.handleDelete(e.currentTarget.dataset.convId));
-        this.on('.generate-assessment-btn', 'click', (e) => this.handleGenerateAssessment(e.currentTarget.dataset.convId, e.currentTarget));
-        this.on('.redirect-btn', 'click', (e) => this.handleRedirect(e.currentTarget.dataset.convId));
-        this.on('.copy-btn', 'click', (e) => this.handleCopy(e.currentTarget));
-        this.on('.view-assessments-btn', 'click', (e) => this.handleToggleAssessments(e.currentTarget.dataset.convId, e.currentTarget));
-        this.on('.delete-assessment-btn', 'click', (e) => this.handleAssessmentDelete(e.currentTarget));
+        this.on('.copy-link-btn', 'click', (e) => this.handleCopyLink(e.currentTarget));
 
         this.onClick('saveEditBtn', () => this.handleSaveEdit());
         this.onClick('confirmDeleteBtn', () => this.handleConfirmDelete());
-        this.onClick('confirmRedirectBtn', () => this.handleConfirmRedirect());
     }
 
     on(selector, event, handler) {
@@ -422,176 +405,42 @@ class ResponseManager {
 
         setTimeout(() => {
             container.remove();
-            if (!document.querySelectorAll('.response-container').length) {
-                this.showEmptyState();
-            }
+            window.location.reload();
         }, 300);
     }
 
-    async handleAssessmentDelete(button) {
-        const assessmentId = button.dataset.assessmentId;
-        const convId = button.dataset.convId;
-        if (!assessmentId || !convId) return;
-        if (!window.confirm('Delete this assessment record?')) return;
+    async handleCopyLink(button) {
+        const url = button?.dataset?.url;
+        if (!url) {
+            this.toast.show('No link available', 'warning');
+            return;
+        }
 
         const originalText = button.textContent;
-        button.disabled = true;
-        button.textContent = 'Deleting...';
-
         try {
-            const data = await this.api.deleteAssessment(assessmentId);
-            this.toast.show('Assessment deleted', 'success');
-            this.removeAssessmentFromUI(convId, assessmentId, data.remaining_assessments || 0);
-        } catch (error) {
-            this.toast.show(`Delete failed: ${error.message}`, 'error');
-        } finally {
-            button.disabled = false;
-            button.textContent = originalText;
-        }
-    }
-
-    removeAssessmentFromUI(convId, assessmentId, remaining) {
-        const list = document.getElementById(`assessments-${convId}`);
-        if (list) {
-            const item = list.querySelector(`[data-assessment-id="${assessmentId}"]`);
-            if (item) {
-                item.classList.add('removing');
-                setTimeout(() => item.remove(), 200);
-            }
-            if (!remaining) {
-                list.style.display = 'none';
-            }
-        }
-
-        const viewBtn = document.querySelector(`.view-assessments-btn[data-conv-id="${convId}"]`);
-        if (viewBtn) {
-            if (remaining > 0) {
-                const expanded = viewBtn.getAttribute('aria-expanded') === 'true';
-                const prefix = expanded ? 'Hide' : 'View';
-                viewBtn.textContent = `${prefix} Assessments (${remaining})`;
-                viewBtn.dataset.assessmentCount = remaining;
+            if (navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(url);
             } else {
-                viewBtn.remove();
-            }
-        }
-
-    }
-
-    showEmptyState() {
-        const layout = document.querySelector('.layout');
-        if (layout) {
-            layout.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-icon"></div>
-                    <h3>No Responses Yet</h3>
-                    <p>Complete a voice interview to see responses here.</p>
-                    <a href="/" class="control-btn primary">Start Interview</a>
-                </div>
-            `;
-        }
-    }
-
-    // ASSESSMENT
-    async handleGenerateAssessment(convId, btn) {
-        const originalText = btn.textContent;
-
-        try {
-            btn.disabled = true;
-            btn.textContent = 'Generating...';
-
-            const data = await this.api.generateAssessment(convId);
-            this.assessmentUrls.set(convId, data.assessment_url);
-
-            const urlDisplay = document.getElementById(`url-display-${convId}`);
-            const urlInput = urlDisplay.querySelector('.url-input');
-            const redirectBtn = document.querySelector(`.redirect-btn[data-conv-id="${convId}"]`);
-
-            urlInput.value = data.assessment_url;
-            urlDisplay.style.display = 'flex';
-            btn.textContent = 'Generated';
-
-            if (redirectBtn) {
-                redirectBtn.style.display = 'inline-flex';
-                redirectBtn.classList.add('pulse-animation');
-                setTimeout(() => redirectBtn.classList.remove('pulse-animation'), 1000);
-            }
-
-            this.toast.show('Assessment URL generated', 'success');
-        } catch (error) {
-            this.toast.show(`Generation failed: ${error.message}`, 'error');
-            btn.disabled = false;
-            btn.textContent = originalText;
-        }
-    }
-
-    handleRedirect(convId) {
-        const url = this.assessmentUrls.get(convId);
-        if (!url) {
-            this.toast.show('Generate URL first', 'warning');
-            return;
-        }
-
-        document.getElementById('redirect-url').value = url;
-        this.modal.show('redirectModal');
-    }
-
-    handleConfirmRedirect() {
-        const url = document.getElementById('redirect-url').value;
-        if (!url) {
-            this.toast.show('Invalid URL', 'error');
-            return;
-        }
-
-        this.toast.show('Redirecting...', 'info', 1500);
-        this.modal.hide('redirectModal');
-        
-        // Use window.open for new page or assign for same tab
-        setTimeout(() => {
-            // Encode URL properly to handle special characters
-            window.location.assign(url);
-        }, 500);
-    }
-
-    async handleCopy(btn) {
-        const input = btn.previousElementSibling;
-        const originalText = btn.textContent;
-
-        try {
-            if (navigator.clipboard) {
-                await navigator.clipboard.writeText(input.value);
-            } else {
-                input.select();
+                const temp = document.createElement('input');
+                temp.value = url;
+                document.body.appendChild(temp);
+                temp.select();
                 document.execCommand('copy');
+                temp.remove();
             }
 
-            btn.textContent = 'Copied!';
-            btn.classList.add('success');
-            this.toast.show('Copied to clipboard', 'success');
-
-            setTimeout(() => {
-                btn.textContent = originalText;
-                btn.classList.remove('success');
-            }, 2000);
+            button.textContent = 'Link copied';
+            button.classList.add('success');
+            this.toast.show('Voice interview link copied', 'success');
         } catch (error) {
-            this.toast.show('Copy failed', 'error');
+            console.error('Copy failed', error);
+            this.toast.show('Could not copy link', 'error');
+        } finally {
+            setTimeout(() => {
+                button.textContent = originalText;
+                button.classList.remove('success');
+            }, 1800);
         }
-    }
-
-    handleToggleAssessments(convId, btn) {
-        const list = document.getElementById(`assessments-${convId}`);
-        if (!list) return;
-
-        if (!list.querySelector('.assessment-item')) {
-            this.toast.show('No assessments yet', 'info');
-            list.style.display = 'none';
-            return;
-        }
-
-        const isHidden = list.style.display === 'none' || !list.style.display;
-
-        list.style.display = isHidden ? 'block' : 'none';
-        btn.textContent = btn.textContent.replace(isHidden ? 'View' : 'Hide', isHidden ? 'Hide' : 'View');
-        btn.setAttribute('aria-expanded', isHidden);
     }
 }
 

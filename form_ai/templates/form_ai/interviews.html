@@ -80,12 +80,33 @@
                 <div class="questions-wrapper">
                     <div class="questions-header">
                         <div>
-                            <h3>Question set</h3>
-                            <p>Questions are asked sequentially during the voice interview.</p>
+                            <h3>Question sections</h3>
+                            <p>Group related prompts so the assistant can guide the conversation by topic.</p>
                         </div>
-                        <span id="question-count" class="pill">0 questions</span>
+                        <span id="section-count" class="pill">0 sections</span>
                     </div>
-                    <div id="question-list"></div>
+
+                    <div class="locked-section-card">
+                        <div class="section-card-header">
+                            <div>
+                                <p class="section-eyebrow">Protected section</p>
+                                <h4>{{ required_section.title }}</h4>
+                            </div>
+                            <span class="section-lock">Always included</span>
+                        </div>
+                        <p class="muted-text">
+                            These onboarding questions collect the candidate's full name, graduation year, and experience.
+                            They cannot be removed.
+                        </p>
+                        <ul class="locked-question-list">
+                            {% for question in required_section.questions %}
+                            <li>{{ question }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+
+                    <div id="section-list" class="section-list"></div>
+                    <button id="add-section" class="control-btn secondary" type="button">+ Add section</button>
                 </div>
 
                 <div class="form-actions">
@@ -117,26 +138,37 @@
                     <p class="summary-text muted-text">No summary provided yet.</p>
                     {% endif %}
 
-                    {% with questions=interview.question_rows %}
-                    <div class="question-preview" data-question-count="{{ questions|length }}">
-                        <p class="question-count">{{ questions|length }} questions</p>
-                        <ul>
-                            {% for question in questions %}
-                            <li class="question-item" data-question-id="{{ question.id }}">
-                                <span class="question-label">{{ forloop.counter }}.</span>
-                                <span class="question-text">{{ question.text }}</span>
-                                <button
-                                    type="button"
-                                    class="delete-question-btn"
-                                    data-question-id="{{ question.id }}"
-                                    aria-label="Delete question {{ forloop.counter }}">
-                                    ×
-                                </button>
-                            </li>
-                            {% empty %}
-                            <li class="muted-text">No questions yet.</li>
-                            {% endfor %}
-                        </ul>
+                    {% with sections=interview.question_sections %}
+                    <div class="question-preview">
+                        {% for section in sections %}
+                        <div class="question-section-preview">
+                            <div class="question-section-header">
+                                <strong>{{ section.title }}</strong>
+                                <span class="question-count">{{ section.questions|length }} questions</span>
+                            </div>
+                            <ul>
+                                {% for question in section.questions %}
+                                <li class="question-item" data-question-id="{{ question.id }}">
+                                    <span class="question-label">{{ question.sequence_number }}.</span>
+                                    <span class="question-text">{{ question.text }}</span>
+                                    {% if not question.metadata.locked %}
+                                    <button
+                                        type="button"
+                                        class="delete-question-btn"
+                                        data-question-id="{{ question.id }}"
+                                        aria-label="Delete question {{ question.sequence_number }}">
+                                        ×
+                                    </button>
+                                    {% else %}
+                                    <span class="question-lock" title="Protected question">🔒</span>
+                                    {% endif %}
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% empty %}
+                        <p class="muted-text">No sections configured.</p>
+                        {% endfor %}
                     </div>
                     {% endwith %}
                     <div class="card-actions">
@@ -163,9 +195,6 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script>
-        window.MIN_QUESTIONS = 3;
-    </script>
     <script src="{% static 'form_ai/js/interviews.js' %}"></script>
 </body>
 

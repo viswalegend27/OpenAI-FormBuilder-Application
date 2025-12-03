@@ -55,6 +55,9 @@
     border-radius: 16px;
     border: 1px solid var(--border);
     background: var(--panel-muted);
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
 }
 
 .questions-header {
@@ -63,6 +66,85 @@
     align-items: center;
     gap: 0.75rem;
     flex-wrap: wrap;
+}
+
+.locked-section-card,
+.section-card {
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: #fff;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.locked-section-card .section-lock {
+    font-size: 0.85rem;
+    padding: 0.15rem 0.75rem;
+    border-radius: 999px;
+    background: rgba(91, 100, 116, 0.15);
+    color: var(--muted);
+}
+
+.section-card-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.section-card-header input,
+.section-title-input {
+    flex: 1;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    background: var(--panel-muted);
+}
+
+.section-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.section-questions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.add-question-btn,
+.remove-section-btn {
+    align-self: flex-start;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    padding: 0.55rem 1rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.add-question-btn {
+    background: rgba(15, 130, 140, 0.12);
+    color: var(--accent);
+}
+
+.remove-section-btn {
+    background: rgba(217, 83, 79, 0.12);
+    color: var(--danger);
+}
+
+.locked-question-list {
+    list-style: decimal;
+    margin: 0;
+    padding-left: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    color: var(--text);
 }
 
 .pill {
@@ -143,6 +225,9 @@
 .question-preview {
     border-top: 1px solid var(--border);
     padding-top: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
 }
 
 .question-preview ul {
@@ -163,6 +248,20 @@
     align-items: center;
 }
 
+.question-section-preview {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0.85rem;
+    background: var(--panel-muted);
+}
+
+.question-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+}
+
 .question-label {
     font-weight: 600;
     color: var(--muted);
@@ -170,6 +269,11 @@
 
 .question-text {
     flex: 1;
+}
+
+.question-lock {
+    font-size: 0.95rem;
+    color: var(--muted);
 }
 
 .delete-question-btn {
@@ -212,4 +316,10 @@
     .interview-list {
         max-height: none;
     }
+}
+.section-eyebrow {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
 }

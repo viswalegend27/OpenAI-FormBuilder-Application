@@ -20,84 +20,146 @@ class Toast {
     }
 }
 
-class QuestionManager {
+class SectionManager {
     constructor(listEl, countEl) {
         this.listEl = listEl;
         this.countEl = countEl;
-        this.minQuestions = Number(window.MIN_QUESTIONS || 1);
-        this.ensureMinimum();
+        this.sectionIndex = 0;
     }
 
-    ensureMinimum() {
-        while (this.listEl.children.length < this.minQuestions) {
-            this.addQuestion();
-        }
+    addSection(initial = {}) {
+        if (!this.listEl) return null;
+        const sectionId = `section-${++this.sectionIndex}`;
+        const sectionEl = document.createElement("div");
+        sectionEl.className = "section-card";
+        sectionEl.dataset.sectionId = sectionId;
+
+        const header = document.createElement("div");
+        header.className = "section-card-header";
+
+        const titleInput = document.createElement("input");
+        titleInput.type = "text";
+        titleInput.className = "section-title-input";
+        titleInput.placeholder = "Section title (e.g., Projects)";
+        titleInput.value = initial.title || "";
+
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "remove-section-btn";
+        removeBtn.textContent = "Remove section";
+        removeBtn.addEventListener("click", () => this.removeSection(sectionEl));
+
+        header.append(titleInput, removeBtn);
+
+        const questionsWrap = document.createElement("div");
+        questionsWrap.className = "section-questions";
+
+        const addQuestionBtn = document.createElement("button");
+        addQuestionBtn.type = "button";
+        addQuestionBtn.className = "add-question-btn";
+        addQuestionBtn.textContent = "+ Add question";
+        addQuestionBtn.addEventListener("click", () => this.addQuestion(sectionEl));
+
+        sectionEl.append(header, questionsWrap, addQuestionBtn);
+        this.listEl.appendChild(sectionEl);
+
+        const questions = initial.questions && initial.questions.length ? initial.questions : [""];
+        questions.forEach((value) => this.addQuestion(sectionEl, value));
+
         this.updateCount();
+        return sectionEl;
     }
 
-    addQuestion(value = "") {
+    addQuestion(sectionEl, value = "") {
+        const questionsWrap = sectionEl.querySelector(".section-questions");
+        if (!questionsWrap) return;
+
         const row = document.createElement("div");
         row.className = "question-row";
 
         const input = document.createElement("input");
         input.type = "text";
-        input.placeholder = `Question ${this.listEl.children.length + 1}`;
-        input.value = value;
-        input.required = true;
+        input.placeholder = "Question";
+        input.value = value || "";
 
         const removeBtn = document.createElement("button");
         removeBtn.type = "button";
         removeBtn.className = "remove-question";
         removeBtn.textContent = "Remove";
-        removeBtn.addEventListener("click", () => this.removeQuestion(row));
+        removeBtn.addEventListener("click", () => this.removeQuestion(row, sectionEl));
 
         row.append(input, removeBtn);
-        this.listEl.appendChild(row);
-        this.updateCount();
-        builderLog("Question row added", { order: this.listEl.children.length, value });
+        questionsWrap.appendChild(row);
+        this.refreshQuestionPlaceholders(sectionEl);
     }
 
-    removeQuestion(row) {
-        if (this.listEl.children.length <= 1) {
+    removeQuestion(row, sectionEl) {
+        const questionsWrap = sectionEl.querySelector(".section-questions");
+        if (!questionsWrap) return;
+        if (questionsWrap.children.length <= 1) {
             row.querySelector("input")?.focus();
             return;
         }
         row.remove();
-        this.updateCount();
+        this.refreshQuestionPlaceholders(sectionEl);
     }
 
-    updateCount() {
-        const count = this.listEl.children.length;
-        if (this.countEl) {
-            this.countEl.textContent = `${count} question${count === 1 ? "" : "s"}`;
+    removeSection(sectionEl) {
+        sectionEl.remove();
+        this.updateCount();
+        if (!this.listEl?.querySelector(".section-card")) {
+            this.addSection();
         }
-        Array.from(this.listEl.querySelectorAll("input")).forEach((input, idx) => {
+    }
+
+    refreshQuestionPlaceholders(sectionEl) {
+        const inputs = sectionEl.querySelectorAll(".section-questions input");
+        inputs.forEach((input, idx) => {
             input.placeholder = `Question ${idx + 1}`;
         });
     }
 
+    updateCount() {
+        if (!this.countEl) return;
+        const sections = this.listEl?.querySelectorAll(".section-card") || [];
+        this.countEl.textContent = `${sections.length} section${sections.length === 1 ? "" : "s"}`;
+    }
+
     values() {
-        return Array.from(this.listEl.querySelectorAll("input"))
-            .map((input) => input.value.trim())
-            .filter((value) => value.length);
+        const sections = [];
+        this.listEl?.querySelectorAll(".section-card").forEach((sectionEl) => {
+            const titleInput = sectionEl.querySelector(".section-title-input");
+            const questions = Array.from(sectionEl.querySelectorAll(".section-questions input"))
+                .map((input) => input.value.trim())
+                .filter(Boolean);
+            if (questions.length === 0) {
+                return;
+            }
+            sections.push({
+                title: titleInput?.value.trim() || "Untitled section",
+                questions,
+            });
+        });
+        return sections;
     }
 }
 
 class InterviewBuilderApp {
     constructor() {
         this.form = document.getElementById("interview-form");
-        this.addBtn = document.getElementById("add-question");
-        this.questionList = document.getElementById("question-list");
-        this.questionCount = document.getElementById("question-count");
+        this.addSectionBtn = document.getElementById("add-section");
+        this.sectionList = document.getElementById("section-list");
+        this.sectionCount = document.getElementById("section-count");
         this.toast = new Toast(document.getElementById("toast"));
         this.submitBtn = this.form?.querySelector("button[type='submit']");
-        this.questionManager = new QuestionManager(this.questionList, this.questionCount);
+        this.sectionManager = new SectionManager(this.sectionList, this.sectionCount);
+        this.sectionManager.addSection();
         this.bindEvents();
         builderLog("Builder initialized");
     }
 
     bindEvents() {
-        this.addBtn?.addEventListener("click", () => this.questionManager.addQuestion());
+        this.addSectionBtn?.addEventListener("click", () => this.sectionManager.addSection());
         this.form?.addEventListener("submit", (event) => this.handleSubmit(event));
     }
 
@@ -114,11 +176,11 @@ class InterviewBuilderApp {
             title,
             summary: (formData.get("summary") || "").toString().trim(),
             ai_prompt: (formData.get("ai_prompt") || "").toString().trim(),
-            questions: this.questionManager.values(),
+            sections: this.sectionManager.values(),
         };
 
-        if (!payload.questions.length) {
-            this.toast.show("Add at least one interview question");
+        if (!payload.sections.length) {
+            this.toast.show("Add at least one question to your sections");
             return null;
         }
 
@@ -216,8 +278,8 @@ class ExistingInterviewManager {
             }
 
             questionItem?.remove();
-            this.resequenceQuestions(card);
             this.toast?.show?.("Question deleted");
+            setTimeout(() => window.location.reload(), 600);
         } catch (error) {
             console.error("Delete question failed", error);
             this.toast?.show?.(error.message || "Delete failed");
@@ -227,22 +289,6 @@ class ExistingInterviewManager {
         }
     }
 
-    resequenceQuestions(card) {
-        if (!card) return;
-        const items = card.querySelectorAll(".question-item");
-        const countLabel = card.querySelector(".question-count");
-
-        items.forEach((item, idx) => {
-            const labelEl = item.querySelector(".question-label");
-            if (labelEl) {
-                labelEl.textContent = `${idx + 1}.`;
-            }
-        });
-
-        if (countLabel) {
-            countLabel.textContent = `${items.length} question${items.length === 1 ? "" : "s"}`;
-        }
-    }
 
     async handleDeleteInterview(button) {
         const interviewId = button.dataset.interviewId;
