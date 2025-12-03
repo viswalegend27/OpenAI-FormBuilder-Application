@@ -147,37 +147,6 @@ def build_verify_tool(fields: List[dict[str, Any]]) -> dict:
 # ============================================================================
 
 
-def get_assessment_persona(
-    qualification: str,
-    experience: str,
-    questions: List[str] | None = None,
-) -> str:
-    """Generate assessment instructions for technical interview."""
-    if not questions:
-        raise ValueError("Assessment questions must be provided from the database")
-
-    question_list = [q.strip() for q in questions if q and q.strip()]
-    if not question_list:
-        raise ValueError("No valid assessment questions were supplied")
-    questions_formatted = _format_questions(question_list)
-
-    return f"""You are Tyler, Techjays' technical interviewer.
-
-You are conducting a technical assessment for a candidate with:
-- Qualification: {qualification}
-- Experience: {experience}
-
-Ask these questions one by one:
-{questions_formatted}
-
-Execution rules:
-- Speak in short, clear sentences and ask exactly one question at a time.
-- After asking a question, stop talking so the candidate can reply. Do not narrate, guess, or invent their answer.
-- If silence continues, gently prompt them (e.g., "Take your time—I'd love to hear your approach"), then pause again. Never provide content on their behalf.
-- Only move to the next question after you have heard the candidate's response for the current one.
-- Summarize briefly once all questions are answered, thank them, and end the assessment."""
-
-
 def build_interview_instructions(interview: InterviewForm) -> str:
     """Construct realtime persona instructions for a given interview form."""
     question_texts = interview.question_texts()

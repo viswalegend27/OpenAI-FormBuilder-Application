@@ -162,7 +162,12 @@
                             data-interview-title="{{ interview.title|escape }}">
                             Delete
                         </button>
-                        <a href="{% url 'voice_page' interview.id %}" class="control-btn primary">Start interview</a>
+                        <button
+                            type="button"
+                            class="control-btn primary start-interview-btn"
+                            data-interview-id="{{ interview.id }}">
+                            Start interview
+                        </button>
                     </div>
                 </article>
                 {% endfor %}

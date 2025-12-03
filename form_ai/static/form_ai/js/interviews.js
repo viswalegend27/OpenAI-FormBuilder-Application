@@ -209,10 +209,8 @@ class InterviewBuilderApp {
             }
 
             builderLog("Interview created", data);
-            this.toast.show("Interview created. Redirecting...");
-            setTimeout(() => {
-                window.location.assign(data.redirect_url || "/");
-            }, 1200);
+            this.toast.show("Interview saved");
+            setTimeout(() => window.location.reload(), 800);
         } catch (error) {
             builderLog("Creation error", error);
             this.toast.show(error.message || "Something went wrong");
@@ -233,6 +231,7 @@ class ExistingInterviewManager {
         this.toast = toast;
         this.bindQuestionDeletes();
         this.bindInterviewDeletes();
+        this.bindStartButtons();
     }
 
     bindQuestionDeletes() {
@@ -321,6 +320,55 @@ class ExistingInterviewManager {
         } catch (error) {
             console.error("Delete interview failed", error);
             this.toast?.show?.(error.message || "Delete failed");
+        } finally {
+            button.disabled = false;
+            button.textContent = originalText;
+        }
+    }
+
+    bindStartButtons() {
+        document.querySelectorAll(".start-interview-btn").forEach((btn) => {
+            if (btn._wired) return;
+            btn._wired = true;
+            btn.addEventListener("click", () => this.handleStartInterview(btn));
+        });
+    }
+
+    getCsrfToken() {
+        const name = "csrftoken=";
+        const cookies = document.cookie.split(";");
+        for (let cookie of cookies) {
+            cookie = cookie.trim();
+            if (cookie.startsWith(name)) {
+                return decodeURIComponent(cookie.substring(name.length));
+            }
+        }
+        return "";
+    }
+
+    async handleStartInterview(button) {
+        const interviewId = button.dataset.interviewId;
+        if (!interviewId) return;
+        const originalText = button.textContent;
+        try {
+            button.disabled = true;
+            button.textContent = "Preparing...";
+            const response = await fetch(`/api/interviews/${interviewId}/links/`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": this.getCsrfToken(),
+                },
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || "Failed to generate link");
+            }
+            this.toast?.show?.("Opening interview...");
+            window.location.assign(data.invite_url);
+        } catch (error) {
+            console.error("Invite link failed", error);
+            this.toast?.show?.(error.message || "Could not create link");
         } finally {
             button.disabled = false;
             button.textContent = originalText;

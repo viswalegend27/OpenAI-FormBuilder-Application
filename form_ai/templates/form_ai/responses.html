@@ -58,15 +58,58 @@
                         <h2>{{ block.interview.title }}</h2>
                     </div>
                     <div class="voice-actions">
-                        <a href="{{ block.voice_url }}" class="control-btn primary">Start Voice Interview</a>
                         <button
                             type="button"
-                            class="control-btn ghost copy-link-btn"
-                            data-url="{{ block.voice_url }}">
-                            Copy link
+                            class="control-btn primary start-interview-btn"
+                            data-interview-id="{{ block.interview.id }}">
+                            Start Voice Interview
                         </button>
-                        <span class="voice-link-hint">{{ block.voice_url }}</span>
+                        <a href="{% url 'interview_builder' %}#builder" class="control-btn ghost">
+                            Edit in Builder
+                        </a>
+                        <button
+                            type="button"
+                            class="control-btn danger ghost delete-interview-btn"
+                            data-interview-id="{{ block.interview.id }}"
+                            data-interview-title="{{ block.interview.title|escape }}">
+                            Delete interview
+                        </button>
                     </div>
+                </div>
+
+                <div class="question-summary">
+                    {% for section in block.interview.question_sections %}
+                    <article class="question-section-card">
+                        <header class="question-section-header">
+                            <div>
+                                <p class="section-eyebrow">{% if section.locked %}Protected{% else %}Section{% endif %}</p>
+                                <strong>{{ section.title }}</strong>
+                            </div>
+                            <span class="question-count">{{ section.questions|length }} questions</span>
+                        </header>
+                        <ul>
+                            {% for question in section.questions %}
+                            <li class="question-summary-item">
+                                <span class="question-text">{{ question.text }}</span>
+                                {% if not question.metadata.locked %}
+                                <button
+                                    type="button"
+                                    class="delete-question-btn"
+                                    data-interview-id="{{ block.interview.id }}"
+                                    data-question-id="{{ question.id }}"
+                                    aria-label="Delete question">
+                                    ×
+                                </button>
+                                {% else %}
+                                <span class="question-lock" title="Protected question">🔒</span>
+                                {% endif %}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </article>
+                    {% empty %}
+                    <p class="muted-text">No questions configured yet.</p>
+                    {% endfor %}
                 </div>
 
                 {% if block.responses %}

@@ -12,12 +12,8 @@ from django.views.decorators.http import require_POST, require_http_methods
 
 from . import constants as C
 from .helper.views_helper import AppError, json_ok
-from .models import (
-    VoiceConversation,
-    TechnicalAssessment,
-    InterviewForm,
-)
-from .workflow import AssessmentFlow, ConversationFlow, InterviewFlow
+from .models import InterviewForm, VoiceConversation
+from .workflow import ConversationFlow, InterviewFlow
 from .views_schema_ import (
     OpenAIClient,
     QuestionIntentSummarizer,
@@ -34,33 +30,32 @@ logger = logging.getLogger(__name__)
 # Constants
 # ============================================================================
 
-ASSESSMENT_TOKEN_MAX_AGE = 60 * 60 * 24 * 7  # 7 days
-TARGET_ASSESSMENT_QUESTIONS = 3
+VOICE_INVITE_TOKEN_MAX_AGE = 60 * 60 * 24  # 1 day
 # ============================================================================
 # Token Management
 # ============================================================================
 
 
-class AssessmentTokenManager:
-    """Handles secure token generation and validation."""
+class VoiceInviteTokenManager:
+    """Handles secure token generation and validation for voice invites."""
 
     def __init__(self):
         self.signer = TimestampSigner()
 
-    def encrypt(self, assessment_id: str) -> str:
-        return self.signer.sign(str(assessment_id))
+    def encrypt(self, interview_id: str) -> str:
+        return self.signer.sign(str(interview_id))
 
     def decrypt(
-        self, token: str, max_age: int = ASSESSMENT_TOKEN_MAX_AGE
+        self, token: str, max_age: int = VOICE_INVITE_TOKEN_MAX_AGE
     ) -> str | None:
         try:
             return self.signer.unsign(token, max_age=max_age)
         except (BadSignature, SignatureExpired) as e:
-            logger.warning(f"Invalid assessment token: {e}")
+            logger.warning(f"Invalid invite token: {e}")
             return None
 
 
-token_manager = AssessmentTokenManager()
+voice_token_manager = VoiceInviteTokenManager()
 
 
 # ============================================================================
@@ -365,21 +360,16 @@ def get_verification_schema(
 
 
 def build_session_payload(request) -> dict:
-    """Build session payload based on request type and assessment mode."""
+    """Build session payload for realtime interviews."""
     payload = C.get_session_payload()
     body = safe_json_parse(request.body) if request.method == "POST" else {}
-    assessment_mode = bool(body.get("assessment_mode"))
-    frontend_questions = (
-        normalize_question_list(body.get("questions")) if assessment_mode else []
-    )
+    interview_id = request.GET.get("interview_id") or body.get("interview_id")
     logger.info(
-        "[SESSION] Incoming session request. Method=%s, assessment=%s, interview_id=%s",
+        "[SESSION] Incoming session request. Method=%s, interview_id=%s",
         request.method,
-        assessment_mode,
-        request.GET.get("interview_id") or body.get("interview_id"),
+        interview_id,
     )
 
-    interview_id = request.GET.get("interview_id") or body.get("interview_id")
     interview = None
     verification_fields: list[dict[str, Any]] = []
     extraction_keys: list[str] = []
@@ -388,54 +378,20 @@ def build_session_payload(request) -> dict:
         logger.info(f"[SESSION] Requested interview_id={interview_id}")
         interview = get_object_or_fail(InterviewForm, id=interview_id)
         verification_fields, extraction_keys = get_verification_schema(interview)
-    elif not assessment_mode:
+    else:
         raise AppError(
             "Interview ID is required to start a realtime session.",
             status=400,
         )
 
-    if assessment_mode:
-        qualification = body.get("qualification", "")
-        experience = body.get("experience", "")
-
-        if frontend_questions:
-            logger.info(
-                "[SESSION][ASSESSMENT] Using %d question(s) from frontend payload",
-                len(frontend_questions),
-            )
-
-        questions_for_persona = frontend_questions or []
-        if not questions_for_persona and interview:
-            questions_for_persona = interview.question_texts()
-
-        if not questions_for_persona:
-            raise AppError(
-                "Assessment questions are missing. Reopen the interview builder and retry.",
-                status=400,
-            )
-
-        payload["instructions"] = C.get_assessment_persona(
-            qualification,
-            experience,
-            questions=questions_for_persona,
-        )
-        logger.info(
-            "[SESSION][ASSESSMENT] Built persona for %s/%s with %d questions",
-            qualification,
-            experience,
-            len(questions_for_persona),
-        )
-        payload.pop("tools", None)
-        payload.pop("tool_choice", None)
-    else:
-        payload["instructions"] = C.build_interview_instructions(interview)
-        payload["tools"] = [C.build_verify_tool(verification_fields)]
-        payload["tool_choice"] = "auto"
-        logger.info(
-            "[SESSION] Attached verify tool with %d fields (%s)",
-            len(extraction_keys),
-            ", ".join(extraction_keys),
-        )
+    payload["instructions"] = C.build_interview_instructions(interview)
+    payload["tools"] = [C.build_verify_tool(verification_fields)]
+    payload["tool_choice"] = "auto"
+    logger.info(
+        "[SESSION] Attached verify tool with %d fields (%s)",
+        len(extraction_keys),
+        ", ".join(extraction_keys),
+    )
 
     instructions_preview = " ".join(
         (payload.get("instructions") or "").splitlines()
@@ -449,7 +405,6 @@ def build_session_payload(request) -> dict:
     )
 
     return payload
-
 
 def clean_verified_data(
     data: Dict[str, Any] | None, allowed_keys: list[str]
@@ -565,6 +520,40 @@ def voice_page(request, interview_id: str | None = None):
     )
 
 
+def voice_invite(request, token: str):
+    """Render voice page using a signed invite token."""
+    interview_id = voice_token_manager.decrypt(token)
+    if not interview_id:
+        return render(
+            request,
+            "form_ai/error.html",
+            {
+                "error": "Invalid or expired interview link",
+                "message": "Generate a new invite from the Interviews page and try again.",
+            },
+            status=400,
+        )
+    return voice_page(request, interview_id)
+
+
+@csrf_exempt
+@require_POST
+@handle_view_errors("Failed to create interview link")
+def create_voice_invite(request, interview_id: str):
+    """Return a short-lived encrypted URL that points to the voice interview."""
+    interview = get_object_or_fail(InterviewForm, id=interview_id)
+    token = voice_token_manager.encrypt(interview.id)
+    invite_url = request.build_absolute_uri(reverse("voice_invite", args=[token]))
+    return json_ok(
+        {
+            "interview_id": str(interview.id),
+            "token": token,
+            "invite_url": invite_url,
+        },
+        status=201,
+    )
+
+
 def view_responses(request):
     """Display all conversation responses in a list view."""
     conversations_queryset = (
@@ -585,13 +574,12 @@ def view_responses(request):
     interviews = list(InterviewForm.objects.order_by("-updated_at"))
     interview_groups: list[dict[str, Any]] = []
     for interview in interviews:
+        entries = interview.get_question_entries()
+        interview.question_sections = InterviewFlow.to_section_groups(entries)
         interview_groups.append(
             {
                 "interview": interview,
                 "responses": interview_map.get(str(interview.id), []),
-                "voice_url": request.build_absolute_uri(
-                    reverse("voice_page", args=[interview.id])
-                ),
             }
         )
 
@@ -609,55 +597,6 @@ def view_responses(request):
             "latest_response": latest_response,
         },
     )
-
-
-def conduct_assessment(request, token: str):
-    """Render assessment page using encrypted token."""
-    assessment_id = token_manager.decrypt(token)
-
-    if not assessment_id:
-        return render(
-            request,
-            "form_ai/error.html",
-            {
-                "error": "Invalid or expired assessment link",
-                "message": "This assessment link is no longer valid.",
-            },
-            status=400,
-        )
-
-    assessment = get_object_or_fail(
-        TechnicalAssessment.objects.select_related(
-            "conversation",
-            "interview_form",
-            "conversation__interview_form",
-            "answer_sheet",
-        ),
-        id=assessment_id,
-    )
-
-    questions_list = [
-        {"number": entry["sequence_number"], "text": entry["text"]}
-        for entry in assessment.get_question_entries()
-    ]
-
-    interview = assessment.interview_form or assessment.conversation.interview_form
-
-    context = {
-        "assessment": assessment,
-        "assessment_id": str(assessment.id),
-        "user_info": assessment.conversation.extracted_info,
-        "questions": questions_list,
-        "interview_id": str(interview.id) if interview else "",
-        "interview_title": interview.title if interview else "",
-    }
-
-    return render(request, "form_ai/assessment.html", context)
-
-
-# ============================================================================
-# Realtime Session
-# ============================================================================
 
 
 @csrf_exempt
@@ -695,8 +634,6 @@ def create_interview(request):
         sections=sections,
     )
 
-    redirect_path = reverse("voice_page", args=[interview.id])
-    redirect_url = request.build_absolute_uri(redirect_path)
     print(
         f"[CREATE_INTERVIEW] Created interview {interview.id} "
         f"({len(interview.get_question_entries())} questions)"
@@ -706,7 +643,6 @@ def create_interview(request):
         {
             "interview_id": str(interview.id),
             "question_count": len(interview.get_question_entries()),
-            "redirect_url": redirect_url,
         },
         status=201,
     )
@@ -818,79 +754,6 @@ def analyze_conversation(request):
 # ============================================================================
 
 
-@csrf_exempt
-@require_POST
-@handle_view_errors("Failed to generate assessment")
-@transaction.atomic
-def generate_assessment(request, conv_id: int):
-    """Generate assessment with role-specific technical questions."""
-    conversation = get_object_or_fail(
-        VoiceConversation.objects.select_related("interview_form"), id=conv_id
-    )
-
-    assessment, questions_list = AssessmentFlow.generate_for_conversation(
-        conversation, target_count=TARGET_ASSESSMENT_QUESTIONS
-    )
-
-    # Generate secure URL
-    encrypted_token = token_manager.encrypt(assessment.id)
-    assessment_url = request.build_absolute_uri(f"/assessment/{encrypted_token}/")
-
-    return json_ok(
-        {
-            "assessment_id": str(assessment.id),
-            "assessment_url": assessment_url,
-            "token": encrypted_token,
-            "question_count": len(questions_list),
-            "redirect": True,
-        }
-    )
-
-
-@csrf_exempt
-@require_http_methods(["POST"])
-@handle_view_errors("Save failed")
-def save_assessment(request, assessment_id: str):
-    """Save assessment conversation transcript."""
-    assessment = get_object_or_fail(TechnicalAssessment, id=assessment_id)
-    body = safe_json_parse(request.body)
-    messages = validate_field(body, "messages", list)
-    session_id = body.get("session_id")
-
-    message_count = AssessmentFlow.save_transcript(assessment, messages, session_id)
-
-    return json_ok(
-        {"assessment_id": str(assessment.id), "message_count": message_count}
-    )
-
-
-@csrf_exempt
-@require_POST
-@handle_view_errors("Analysis failed")
-@transaction.atomic
-def analyze_assessment(request, assessment_id: str):
-    """Analyze assessment responses and save answers."""
-    assessment = get_object_or_fail(
-        TechnicalAssessment.objects.select_related("answer_sheet"), id=assessment_id
-    )
-    body = safe_json_parse(request.body)
-
-    result = AssessmentFlow.analyze_answers(
-        assessment,
-        qa_mapping=body.get("qa_mapping"),
-    )
-
-    return json_ok(
-        {
-            "assessment_id": str(assessment_id),
-            "answers": result["answers"],
-            "completed": True,
-            "total_questions": result["total_questions"],
-            "answered_questions": result["answered_questions"],
-        }
-    )
-
-
 # ============================================================================
 # Response Management
 # ============================================================================
@@ -902,39 +765,13 @@ def analyze_assessment(request, assessment_id: str):
 def view_response(request, conv_id: int):
     """View full response details for a conversation."""
     conversation = get_object_or_fail(
-        VoiceConversation.objects.select_related("interview_form").prefetch_related(
-            "assessments", "assessments__answer_sheet"
-        ),
+        VoiceConversation.objects.select_related("interview_form"),
         id=conv_id,
     )
 
     response_number = VoiceConversation.objects.filter(
         created_at__lte=conversation.created_at
     ).count()
-
-    assessments_data = []
-    for assessment in conversation.assessments.all():
-        answers = (assessment.answer_sheet.answers if hasattr(assessment, "answer_sheet") else {}) or {}
-        qa_pairs = []
-        for question in assessment.get_question_entries():
-            question_id = question["id"]
-            answer_text = answers.get(question_id) or "NIL"
-            qa_pairs.append(
-                {
-                    "number": question["sequence_number"],
-                    "question": question["text"],
-                    "answer": answer_text,
-                }
-            )
-
-        assessments_data.append(
-            {
-                "id": str(assessment.id),
-                "completed": assessment.is_completed,
-                "qa_pairs": qa_pairs,
-                "completion_percentage": assessment.completion_percentage,
-            }
-        )
 
     return json_ok(
         {
@@ -944,7 +781,6 @@ def view_response(request, conv_id: int):
             "user_response": conversation.extracted_info,  # Keep key name for frontend compatibility
             "field_labels": get_field_label_map(conversation.interview_form),
             "messages": conversation.messages,
-            "assessments": assessments_data,
             "interview_form": (
                 {
                     "id": str(conversation.interview_form.id),
@@ -994,21 +830,3 @@ def delete_response(request, conv_id: int):
     return json_ok({"message": "Response deleted successfully"})
 
 
-@csrf_exempt
-@require_http_methods(["DELETE"])
-@handle_view_errors("Failed to delete assessment")
-@transaction.atomic
-def delete_assessment(request, assessment_id):
-    """Delete an assessment and associated answers."""
-    assessment = get_object_or_fail(
-        TechnicalAssessment.objects.select_related("conversation"), id=assessment_id
-    )
-    conversation, remaining = AssessmentFlow.delete_assessment(assessment)
-
-    return json_ok(
-        {
-            "assessment_id": str(assessment_id),
-            "conversation_id": conversation.id,
-            "remaining_assessments": remaining,
-        }
-    )

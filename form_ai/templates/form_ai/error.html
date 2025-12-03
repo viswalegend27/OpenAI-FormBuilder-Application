@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ error|default:"Link Error" }}</title>
+    {% load static %}
+    <link rel="icon" href="{% static 'form_ai/favicon.ico' %}">
+    <link rel="stylesheet" href="{% static 'form_ai/css/app-shell.css' %}">
+</head>
+<body class="error-page">
+    <main class="layout layout-centered">
+        <section class="panel">
+            <h1>{{ error|default:"Something went wrong" }}</h1>
+            <p class="muted-text">{{ message|default:"This link is no longer valid." }}</p>
+            <a class="control-btn primary" href="{% url 'interview_builder' %}">Back to Builder</a>
+        </section>
+    </main>
+</body>
+</html>

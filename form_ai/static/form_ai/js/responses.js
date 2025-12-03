@@ -89,6 +89,24 @@ class APIService {
         });
     }
 
+    createInviteLink(interviewId) {
+        return this.request(`/api/interviews/${interviewId}/links/`, {
+            method: 'POST'
+        });
+    }
+
+    deleteInterview(interviewId) {
+        return this.request(`/api/interviews/${interviewId}/`, {
+            method: 'DELETE'
+        });
+    }
+
+    deleteInterviewQuestion(interviewId, questionId) {
+        return this.request(`/api/interviews/${interviewId}/questions/${questionId}/`, {
+            method: 'DELETE'
+        });
+    }
+
 }
 
 // ============================================================
@@ -210,7 +228,9 @@ class ResponseManager {
         this.on('.view-btn', 'click', (e) => this.handleView(e.currentTarget.dataset.convId));
         this.on('.edit-btn', 'click', (e) => this.handleEdit(e.currentTarget.dataset.convId));
         this.on('.delete-btn', 'click', (e) => this.handleDelete(e.currentTarget.dataset.convId));
-        this.on('.copy-link-btn', 'click', (e) => this.handleCopyLink(e.currentTarget));
+        this.on('.start-interview-btn', 'click', (e) => this.handleStartInterview(e.currentTarget));
+        this.on('.delete-interview-btn', 'click', (e) => this.handleDeleteInterview(e.currentTarget));
+        this.on('.delete-question-btn', 'click', (e) => this.handleDeleteQuestion(e.currentTarget));
 
         this.onClick('saveEditBtn', () => this.handleSaveEdit());
         this.onClick('confirmDeleteBtn', () => this.handleConfirmDelete());
@@ -409,37 +429,65 @@ class ResponseManager {
         }, 300);
     }
 
-    async handleCopyLink(button) {
-        const url = button?.dataset?.url;
-        if (!url) {
-            this.toast.show('No link available', 'warning');
+    async handleStartInterview(button) {
+        const interviewId = button.dataset.interviewId;
+        if (!interviewId) return;
+        const originalText = button.textContent;
+        try {
+            button.disabled = true;
+            button.textContent = 'Preparing...';
+            const data = await this.api.createInviteLink(interviewId);
+            this.toast.show('Opening voice interview...', 'info', 1200);
+            window.location.assign(data.invite_url);
+        } catch (error) {
+            this.toast.show(error.message || 'Failed to create link', 'error');
+        } finally {
+            button.disabled = false;
+            button.textContent = originalText;
+        }
+    }
+
+    async handleDeleteInterview(button) {
+        const interviewId = button.dataset.interviewId;
+        const title = button.dataset.interviewTitle || 'this interview';
+        if (!interviewId) return;
+        if (!window.confirm(`Delete "${title}"? This removes the interview and its questions.`)) {
             return;
         }
 
         const originalText = button.textContent;
         try {
-            if (navigator.clipboard?.writeText) {
-                await navigator.clipboard.writeText(url);
-            } else {
-                const temp = document.createElement('input');
-                temp.value = url;
-                document.body.appendChild(temp);
-                temp.select();
-                document.execCommand('copy');
-                temp.remove();
-            }
-
-            button.textContent = 'Link copied';
-            button.classList.add('success');
-            this.toast.show('Voice interview link copied', 'success');
+            button.disabled = true;
+            button.textContent = 'Deleting...';
+            await this.api.deleteInterview(interviewId);
+            this.toast.show('Interview deleted', 'success');
+            window.location.reload();
         } catch (error) {
-            console.error('Copy failed', error);
-            this.toast.show('Could not copy link', 'error');
+            this.toast.show(error.message || 'Delete failed', 'error');
         } finally {
-            setTimeout(() => {
-                button.textContent = originalText;
-                button.classList.remove('success');
-            }, 1800);
+            button.disabled = false;
+            button.textContent = originalText;
+        }
+    }
+
+    async handleDeleteQuestion(button) {
+        const interviewId = button.dataset.interviewId;
+        const questionId = button.dataset.questionId;
+        if (!interviewId || !questionId) return;
+        if (!window.confirm('Delete this question from the interview?')) return;
+
+        const originalText = button.textContent;
+        try {
+            button.disabled = true;
+            button.textContent = '...';
+            await this.api.deleteInterviewQuestion(interviewId, questionId);
+            this.toast.show('Question deleted', 'success');
+            window.location.reload();
+        } catch (error) {
+            this.toast.show(error.message || 'Delete failed', 'error');
+        } finally {
+            button.disabled = false;
+            button.textContent = originalText;
         }
     }
 }
