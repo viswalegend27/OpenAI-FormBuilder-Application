@@ -181,6 +181,7 @@ class ResponseManager {
         this.bindAll('.edit-btn', 'click', e => this.handleEdit(e.target.dataset.convId));
         this.bindAll('.delete-btn', 'click', e => this.handleDelete(e.target.dataset.convId));
         this.bindAll('.start-interview-btn', 'click', e => this.handleStartInterview(e.target));
+        this.bindAll('.invite-link-btn', 'click', e => this.handleCopyInvite(e.target));
         this.bindAll('.delete-interview-btn', 'click', e => this.handleDeleteInterview(e.target));
         this.bindAll('.toggle-responses-btn', 'click', e => this.handleToggle(e.target));
 
@@ -371,10 +372,10 @@ class ResponseManager {
 
   // INTERVIEW ACTIONS
     async handleStartInterview(btn) {
-    const id = btn.dataset.interviewId;
-    if (!id) return;
+        const id = btn.dataset.interviewId;
+        if (!id) return;
 
-    const original = btn.textContent;
+        const original = btn.textContent;
 
     try {
         btn.disabled = true;
@@ -388,6 +389,59 @@ class ResponseManager {
         btn.disabled = false;
         btn.textContent = original;
     }
+    }
+
+    async handleCopyInvite(btn) {
+        const id = btn.dataset.interviewId;
+        if (!id) return;
+
+        const original = btn.textContent;
+        try {
+            btn.disabled = true;
+            btn.textContent = 'Generating...';
+            const data = await this.api.createInviteLink(id);
+            const copied = await this.copyToClipboard(data.invite_url);
+            if (!copied) {
+                throw new Error('Clipboard unavailable');
+            }
+            this.toast.show('Invite link copied', 'success');
+            btn.textContent = 'Link copied';
+        } catch (err) {
+            this.toast.show(err.message || 'Failed to copy link', 'error');
+            btn.textContent = original;
+        } finally {
+            btn.disabled = false;
+            setTimeout(() => (btn.textContent = 'Generate URL'), 1500);
+        }
+    }
+
+    async copyToClipboard(text) {
+        if (navigator.clipboard?.writeText) {
+            try {
+                await navigator.clipboard.writeText(text);
+                return true;
+            } catch (_) {
+                /* fallthrough */
+            }
+        }
+
+        const temp = document.createElement('textarea');
+        temp.value = text;
+        temp.style.position = 'fixed';
+        temp.style.opacity = '0';
+        document.body.appendChild(temp);
+        temp.focus();
+        temp.select();
+        temp.setSelectionRange(0, text.length);
+        let success = false;
+        try {
+            success = document.execCommand('copy');
+        } catch (_) {
+            success = false;
+        } finally {
+            temp.remove();
+        }
+        return success;
     }
 
     async handleDeleteInterview(btn) {

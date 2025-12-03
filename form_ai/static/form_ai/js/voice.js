@@ -112,7 +112,6 @@ const appendMessageToDom = (role, text = '', saveToMemory = true) => {
     el.bubbleEl.textContent = text;
     el.msgEl.classList.add('streaming');
     updateLastAssistant(text);
-    el.msgEl.scrollIntoView({ block: 'end', behavior: 'smooth' });
     };
 
     const finalize = (el, text) => {
@@ -127,7 +126,6 @@ const appendMessageToDom = (role, text = '', saveToMemory = true) => {
     el.bubbleEl.textContent = trimmed;
     el.msgEl.classList.remove('streaming');
     updateLastAssistant(trimmed);
-    el.msgEl.scrollIntoView({ block: 'end', behavior: 'smooth' });
 };
 
 // ============================================================
