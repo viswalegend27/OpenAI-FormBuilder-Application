@@ -67,6 +67,12 @@
                             data-interview-id="{{ block.interview.id }}">
                             Start interview
                         </button>
+                        <button
+                            type="button"
+                            class="control-btn secondary invite-link-btn"
+                            data-interview-id="{{ block.interview.id }}">
+                            Generate URL
+                        </button>
                         <a href="{% url 'interview_builder' %}#builder" class="control-btn ghost">Manage template</a>
                         <button
                             type="button"
@@ -117,10 +123,6 @@
                                     <span class="meta-label">Logged</span>
                                     <span class="meta-value">{{ conv.created_at|date:"M d, Y - H:i" }}</span>
                                 </div>
-                                <div class="meta-row">
-                                    <span class="meta-label">Session</span>
-                                    <span class="meta-value">{{ conv.session_id|default:"-" }}</span>
-                                </div>
                             </div>
                             {% if conv.display_fields %}
                             <div class="response-fields narrow">
@@ -158,19 +160,19 @@
                 </header>
                 <ul class="responses-list compact">
                     {% for conv in unassigned_responses %}
-                    <li class="response-container" data-conv-id="{{ conv.id }}">
-                        <div class="response-meta">
-                            <div class="meta-row">
-                                <span class="meta-label">Logged</span>
-                                <span class="meta-value">{{ conv.created_at|date:"M d, Y - H:i" }}</span>
+                        <li class="response-container" data-conv-id="{{ conv.id }}">
+                            <div class="response-meta">
+                                <div class="meta-row">
+                                    <span class="meta-label">Logged</span>
+                                    <span class="meta-value">{{ conv.created_at|date:"M d, Y - H:i" }}</span>
+                                </div>
                             </div>
-                        </div>
-                        <div class="response-actions">
-                            <button class="control-btn view-btn" data-conv-id="{{ conv.id }}">View</button>
-                            <button class="control-btn edit-btn" data-conv-id="{{ conv.id }}">Edit</button>
-                            <button class="control-btn danger delete-btn" data-conv-id="{{ conv.id }}">Delete</button>
-                        </div>
-                    </li>
+                            <div class="response-actions">
+                                <button class="control-btn view-btn" data-conv-id="{{ conv.id }}">View</button>
+                                <button class="control-btn edit-btn" data-conv-id="{{ conv.id }}">Edit</button>
+                                <button class="control-btn danger delete-btn" data-conv-id="{{ conv.id }}">Delete</button>
+                            </div>
+                        </li>
                     {% endfor %}
                 </ul>
             </section>

@@ -154,19 +154,25 @@
                         {% endfor %}
                     </div>
                     {% endwith %}
-                    <div class="card-actions">
+                <div class="card-actions">
                         <button
                             type="button"
-                            class="control-btn danger delete-interview-btn"
-                            data-interview-id="{{ interview.id }}"
-                            data-interview-title="{{ interview.title|escape }}">
-                            Delete
+                            class="control-btn secondary invite-link-btn"
+                            data-interview-id="{{ interview.id }}">
+                            Generate URL
                         </button>
                         <button
                             type="button"
                             class="control-btn primary start-interview-btn"
                             data-interview-id="{{ interview.id }}">
                             Start interview
+                        </button>
+                        <button
+                            type="button"
+                            class="control-btn danger delete-interview-btn"
+                            data-interview-id="{{ interview.id }}"
+                            data-interview-title="{{ interview.title|escape }}">
+                            Delete
                         </button>
                     </div>
                 </article>

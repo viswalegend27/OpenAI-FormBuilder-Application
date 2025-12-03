@@ -57,18 +57,32 @@
     Ensures Start Interview, Manage Template, Delete
     all share consistent sizing and shape
     ---------------------------------------------- */
-    .interview-actions {
+.interview-actions {
     display: flex;
     gap: 0.75rem;
     flex-wrap: wrap;
     align-items: center;
-    }
+}
 
-    .interview-actions .control-btn {
+.interview-actions .control-btn {
     border-radius: 10px;
     padding: 0.65rem 1.4rem;
     font-size: 0.95rem;
-    }
+}
+
+.interview-actions .invite-link-btn {
+    background: #fff;
+    color: var(--accent);
+    border-color: rgba(15, 130, 140, 0.4);
+    box-shadow: 0 8px 16px rgba(15, 130, 140, 0.08);
+}
+
+.interview-actions .invite-link-btn:hover,
+.interview-actions .invite-link-btn:focus-visible {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+}
 
     /* ----------------------------------------------
     6. SECTION PILLS

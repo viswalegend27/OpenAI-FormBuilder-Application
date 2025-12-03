@@ -232,6 +232,7 @@ class ExistingInterviewManager {
         this.bindQuestionDeletes();
         this.bindInterviewDeletes();
         this.bindStartButtons();
+        this.bindInviteButtons();
     }
 
     bindQuestionDeletes() {
@@ -334,6 +335,14 @@ class ExistingInterviewManager {
         });
     }
 
+    bindInviteButtons() {
+        document.querySelectorAll(".invite-link-btn").forEach((btn) => {
+            if (btn._wired) return;
+            btn._wired = true;
+            btn.addEventListener("click", () => this.handleCopyInvite(btn));
+        });
+    }
+
     getCsrfToken() {
         const name = "csrftoken=";
         const cookies = document.cookie.split(";");
@@ -372,6 +381,38 @@ class ExistingInterviewManager {
         } finally {
             button.disabled = false;
             button.textContent = originalText;
+        }
+    }
+
+    async handleCopyInvite(button) {
+        const interviewId = button.dataset.interviewId;
+        if (!interviewId) return;
+
+        const originalText = button.textContent;
+        try {
+            button.disabled = true;
+            button.textContent = "Generating...";
+            const response = await fetch(`/api/interviews/${interviewId}/links/`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": this.getCsrfToken(),
+                },
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || "Failed to generate link");
+            }
+            await navigator.clipboard.writeText(data.invite_url);
+            button.textContent = "Link copied";
+            this.toast?.show?.("Invite link copied to clipboard");
+        } catch (error) {
+            console.error("Invite link failed", error);
+            this.toast?.show?.(error.message || "Could not create link");
+            button.textContent = originalText;
+        } finally {
+            button.disabled = false;
+            setTimeout(() => (button.textContent = "Generate URL"), 1500);
         }
     }
 

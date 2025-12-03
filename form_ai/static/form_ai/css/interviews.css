@@ -298,6 +298,20 @@
     flex-wrap: wrap;
 }
 
+.card-actions .invite-link-btn {
+    background: #fff;
+    color: var(--accent);
+    border-color: rgba(15, 130, 140, 0.4);
+    box-shadow: 0 6px 14px rgba(15, 130, 140, 0.12);
+}
+
+.card-actions .invite-link-btn:hover,
+.card-actions .invite-link-btn:focus-visible {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+}
+
 .empty-state {
     padding: 2rem;
     text-align: center;

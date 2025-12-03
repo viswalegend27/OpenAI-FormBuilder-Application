@@ -229,6 +229,7 @@ class ResponseManager {
         this.on('.edit-btn', 'click', (e) => this.handleEdit(e.currentTarget.dataset.convId));
         this.on('.delete-btn', 'click', (e) => this.handleDelete(e.currentTarget.dataset.convId));
         this.on('.start-interview-btn', 'click', (e) => this.handleStartInterview(e.currentTarget));
+        this.on('.invite-link-btn', 'click', (e) => this.handleCopyInvite(e.currentTarget));
         this.on('.delete-interview-btn', 'click', (e) => this.handleDeleteInterview(e.currentTarget));
         this.on('.toggle-responses-btn', 'click', (e) => this.handleToggleResponses(e.currentTarget));
 
@@ -430,6 +431,26 @@ class ResponseManager {
         } finally {
             button.disabled = false;
             button.textContent = originalText;
+        }
+    }
+
+    async handleCopyInvite(button) {
+        const interviewId = button.dataset.interviewId;
+        if (!interviewId) return;
+        const originalText = button.textContent;
+        try {
+            button.disabled = true;
+            button.textContent = 'Generating...';
+            const data = await this.api.createInviteLink(interviewId);
+            await navigator.clipboard.writeText(data.invite_url);
+            this.toast.show('Invite link copied', 'success');
+            button.textContent = 'Link copied';
+        } catch (error) {
+            this.toast.show(error.message || 'Failed to copy link', 'error');
+            button.textContent = originalText;
+        } finally {
+            button.disabled = false;
+            setTimeout(() => (button.textContent = 'Generate URL'), 1500);
         }
     }
 
