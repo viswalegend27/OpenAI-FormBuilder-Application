@@ -190,5 +190,4 @@ def build_interview_instructions(interview: InterviewForm) -> str:
     return _compose_voice_instructions(
         question_texts,
         title_label,
-        custom_prompt=interview.ai_prompt or "",
     )

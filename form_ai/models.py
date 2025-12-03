@@ -128,13 +128,6 @@ class InterviewForm(QuestionListMixin, models.Model):
     title = models.CharField(
         max_length=255, help_text="Internal name for the interview"
     )
-    summary = models.TextField(
-        blank=True, help_text="Short description shown on the builder page"
-    )
-    ai_prompt = models.TextField(
-        blank=True,
-        help_text="Optional custom instructions appended to the base AI persona",
-    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

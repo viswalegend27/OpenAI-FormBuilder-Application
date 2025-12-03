@@ -342,6 +342,30 @@ function sendVerifyToolOutput(status, data = null) {
     });
 })();
 
+function sanitizeSdp(answer) {
+    if (!answer || typeof answer !== "string") return "";
+    const lines = answer.split(/\r?\n/);
+    const sanitized = [];
+    const extraTokens = /\s(ufrag|network-id|network-cost)\s[^ \r\n]+/gi;
+
+    for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line) continue;
+
+        if (line.startsWith("a=candidate")) {
+            if (/\sTCP\s/i.test(line)) {
+                continue;
+            }
+            sanitized.push(line.replace(extraTokens, ""));
+            continue;
+        }
+
+        sanitized.push(line);
+    }
+
+    return sanitized.join("\r\n") + "\r\n";
+}
+
 async function startVoice() {
     const status = $("status"), remote = $("remote"), stopBtn = $("stop");
     let currentAssistant = null, aiStreaming = "", sessionCreated = false;
@@ -505,7 +529,8 @@ async function startVoice() {
         );
         if (!oaResp.ok) throw new Error(await oaResp.text());
         const answerSdp = await oaResp.text();
-        await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
+        const cleanSdp = sanitizeSdp(answerSdp);
+        await pc.setRemoteDescription({ type: "answer", sdp: cleanSdp });
 
         status && (status.textContent = "Connected");
     } catch (err) {

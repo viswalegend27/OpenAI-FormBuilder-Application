@@ -66,17 +66,6 @@
                     </label>
                 </div>
 
-                <label class="form-field">
-                    <span>Short summary</span>
-                    <textarea name="summary" rows="2" placeholder="Optional note for teammates"></textarea>
-                </label>
-
-                <label class="form-field">
-                    <span>Optional AI guidance</span>
-                    <textarea name="ai_prompt" rows="3"
-                        placeholder="Add any extra tone or domain instructions for the AI interviewer."></textarea>
-                </label>
-
                 <div class="questions-wrapper">
                     <div class="questions-header">
                         <div>
@@ -132,12 +121,6 @@
                     <header>
                         <h3>{{ interview.title }}</h3>
                     </header>
-                    {% if interview.summary %}
-                    <p class="summary-text">{{ interview.summary }}</p>
-                    {% else %}
-                    <p class="summary-text muted-text">No summary provided yet.</p>
-                    {% endif %}
-
                     {% with sections=interview.question_sections %}
                     <div class="question-preview">
                         {% for section in sections %}

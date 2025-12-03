@@ -418,10 +418,17 @@ class QuestionIntentSummarizer:
     """Use LLM to identify the data each interview question tries to capture."""
 
     def __init__(self, api_key: Optional[str] = None):
-        self.client = OpenAIClient(api_key)
+        self.client = None
+        try:
+            self.client = OpenAIClient(api_key)
+        except AppError as exc:
+            logger.info("[QUESTION_INTENT] Disabled summarizer: %s", exc)
+            self.client = None
 
     def summarize(self, questions: List[Dict[str, Any]]) -> Dict[str, Dict[str, str]]:
         if not questions:
+            return {}
+        if not self.client:
             return {}
 
         messages = [

@@ -174,8 +174,6 @@ class InterviewBuilderApp {
 
         const payload = {
             title,
-            summary: (formData.get("summary") || "").toString().trim(),
-            ai_prompt: (formData.get("ai_prompt") || "").toString().trim(),
             sections: this.sectionManager.values(),
         };
 

@@ -38,8 +38,6 @@ REQUIRED_QUESTIONS = [
 
 STARTER_INTERVIEW_TEMPLATE = {
     "title": "Sample Interview Plan",
-    "summary": "Starter interview generated automatically. Update it to match your role.",
-    "ai_prompt": "",
     "sections": [
         {
             "title": "Projects",
@@ -67,8 +65,6 @@ class InterviewFlow:
     def create_form(
         *,
         title: str,
-        summary: str = "",
-        ai_prompt: str = "",
         sections: Iterable[Mapping[str, Any]] | None,
     ) -> InterviewForm:
         title_value = (title or "").strip()
@@ -84,8 +80,6 @@ class InterviewFlow:
 
         interview = InterviewForm.objects.create(
             title=title_value,
-            summary=(summary or "").strip(),
-            ai_prompt=(ai_prompt or "").strip(),
         )
         interview.set_question_entries(question_entries)
         interview.save(update_fields=["question_schema", "updated_at"])
@@ -229,8 +223,6 @@ class InterviewFlow:
         try:
             interview = InterviewFlow.create_form(
                 title=template["title"],
-                summary=template.get("summary", ""),
-                ai_prompt=template.get("ai_prompt", ""),
                 sections=template.get("sections"),
             )
             logger.info("[FLOW:INTERVIEW] Seeded starter interview %s", interview.id)

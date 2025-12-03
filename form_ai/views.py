@@ -254,7 +254,12 @@ def summarize_question_intents(
             }
         )
 
-    summaries = summarizer.summarize(payload)
+    try:
+        summaries = summarizer.summarize(payload)
+    except Exception as exc:  # pragma: no cover - defensive path
+        logger.warning("[QUESTION_INTENT] Failed to summarize: %s", exc)
+        summaries = {item["id"]: {} for item in payload}
+
     QUESTION_INTENT_CACHE[cache_key] = {"token": freshness_token, "data": summaries}
     return summaries
 
@@ -327,8 +332,18 @@ def build_verification_fields(interview: InterviewForm | None) -> list[dict[str,
     ordered_questions = list(interview.ordered_questions())
     question_summaries = summarize_question_intents(interview, ordered_questions)
     used_keys = {field["key"] for field in fields}
+    base_keys = set(used_keys)
 
     for question in ordered_questions:
+        question_meta = question.get("metadata") or {}
+        field_key = (question_meta.get("field_key") or "").strip()
+
+        if question_meta.get("locked"):
+            continue
+
+        if field_key and field_key in base_keys:
+            continue
+
         metadata = question_summaries.get(str(question.get("id")), {})
         fields.append(build_question_field(question, metadata, used_keys))
 
@@ -677,8 +692,6 @@ def create_interview(request):
     sections = validate_field(body, "sections", list)
     interview = InterviewFlow.create_form(
         title=title,
-        summary=body.get("summary") or "",
-        ai_prompt=body.get("ai_prompt") or "",
         sections=sections,
     )
 
