@@ -1,6 +1,10 @@
-const builderLog = (...args) => console.log("[InterviewBuilder]", ...args);
+const builderLog = (...args) => console.log('[InterviewBuilder]', ...args);
 
-class Toast {
+// ============================================================
+// TOAST
+// ============================================================
+
+    class Toast {
     constructor(el) {
         this.el = el;
         this.timer = null;
@@ -9,18 +13,17 @@ class Toast {
     show(message, duration = 2500) {
         if (!this.el) return;
         this.el.textContent = message;
-        this.el.classList.add("show");
+        this.el.classList.add('show');
         clearTimeout(this.timer);
-        this.timer = setTimeout(() => this.hide(), duration);
+        this.timer = setTimeout(() => this.el.classList.remove('show'), duration);
+    }
     }
 
-    hide() {
-        if (!this.el) return;
-        this.el.classList.remove("show");
-    }
-}
+    // ============================================================
+    // SECTION MANAGER
+    // ============================================================
 
-class SectionManager {
+    class SectionManager {
     constructor(listEl, countEl) {
         this.listEl = listEl;
         this.countEl = countEl;
@@ -29,421 +32,350 @@ class SectionManager {
 
     addSection(initial = {}) {
         if (!this.listEl) return null;
+
         const sectionId = `section-${++this.sectionIndex}`;
-        const sectionEl = document.createElement("div");
-        sectionEl.className = "section-card";
+        const sectionEl = document.createElement('div');
+        sectionEl.className = 'section-card';
         sectionEl.dataset.sectionId = sectionId;
 
-        const header = document.createElement("div");
-        header.className = "section-card-header";
+        sectionEl.innerHTML = `
+        <div class="section-card-header">
+            <input type="text" class="section-title-input" 
+                placeholder="Section title (e.g., Projects)" 
+                value="${initial.title || ''}">
+            <button type="button" class="remove-section-btn">Remove section</button>
+        </div>
+        <div class="section-questions"></div>
+        <button type="button" class="add-question-btn">+ Add question</button>
+        `;
 
-        const titleInput = document.createElement("input");
-        titleInput.type = "text";
-        titleInput.className = "section-title-input";
-        titleInput.placeholder = "Section title (e.g., Projects)";
-        titleInput.value = initial.title || "";
+        sectionEl.querySelector('.remove-section-btn')
+        .addEventListener('click', () => this.removeSection(sectionEl));
+        
+        sectionEl.querySelector('.add-question-btn')
+        .addEventListener('click', () => this.addQuestion(sectionEl));
 
-        const removeBtn = document.createElement("button");
-        removeBtn.type = "button";
-        removeBtn.className = "remove-section-btn";
-        removeBtn.textContent = "Remove section";
-        removeBtn.addEventListener("click", () => this.removeSection(sectionEl));
-
-        header.append(titleInput, removeBtn);
-
-        const questionsWrap = document.createElement("div");
-        questionsWrap.className = "section-questions";
-
-        const addQuestionBtn = document.createElement("button");
-        addQuestionBtn.type = "button";
-        addQuestionBtn.className = "add-question-btn";
-        addQuestionBtn.textContent = "+ Add question";
-        addQuestionBtn.addEventListener("click", () => this.addQuestion(sectionEl));
-
-        sectionEl.append(header, questionsWrap, addQuestionBtn);
         this.listEl.appendChild(sectionEl);
 
-        const questions = initial.questions && initial.questions.length ? initial.questions : [""];
-        questions.forEach((value) => this.addQuestion(sectionEl, value));
+        const questions = initial.questions?.length ? initial.questions : [''];
+        questions.forEach(q => this.addQuestion(sectionEl, q));
 
         this.updateCount();
         return sectionEl;
     }
 
-    addQuestion(sectionEl, value = "") {
-        const questionsWrap = sectionEl.querySelector(".section-questions");
-        if (!questionsWrap) return;
+    addQuestion(sectionEl, value = '') {
+        const wrap = sectionEl.querySelector('.section-questions');
+        if (!wrap) return;
 
-        const row = document.createElement("div");
-        row.className = "question-row";
+        const row = document.createElement('div');
+        row.className = 'question-row';
+        row.innerHTML = `
+        <input type="text" placeholder="Question" value="${value}">
+        <button type="button" class="remove-question">Remove</button>
+        `;
 
-        const input = document.createElement("input");
-        input.type = "text";
-        input.placeholder = "Question";
-        input.value = value || "";
+        row.querySelector('.remove-question')
+        .addEventListener('click', () => this.removeQuestion(row, sectionEl));
 
-        const removeBtn = document.createElement("button");
-        removeBtn.type = "button";
-        removeBtn.className = "remove-question";
-        removeBtn.textContent = "Remove";
-        removeBtn.addEventListener("click", () => this.removeQuestion(row, sectionEl));
-
-        row.append(input, removeBtn);
-        questionsWrap.appendChild(row);
-        this.refreshQuestionPlaceholders(sectionEl);
+        wrap.appendChild(row);
+        this.refreshPlaceholders(sectionEl);
     }
 
     removeQuestion(row, sectionEl) {
-        const questionsWrap = sectionEl.querySelector(".section-questions");
-        if (!questionsWrap) return;
-        if (questionsWrap.children.length <= 1) {
-            row.querySelector("input")?.focus();
-            return;
+        const wrap = sectionEl.querySelector('.section-questions');
+        if (wrap.children.length <= 1) {
+        row.querySelector('input')?.focus();
+        return;
         }
         row.remove();
-        this.refreshQuestionPlaceholders(sectionEl);
+        this.refreshPlaceholders(sectionEl);
     }
 
     removeSection(sectionEl) {
         sectionEl.remove();
         this.updateCount();
-        if (!this.listEl?.querySelector(".section-card")) {
-            this.addSection();
+        
+        if (!this.listEl.querySelector('.section-card')) {
+        this.addSection();
         }
     }
 
-    refreshQuestionPlaceholders(sectionEl) {
-        const inputs = sectionEl.querySelectorAll(".section-questions input");
-        inputs.forEach((input, idx) => {
-            input.placeholder = `Question ${idx + 1}`;
+    refreshPlaceholders(sectionEl) {
+        sectionEl.querySelectorAll('.section-questions input').forEach((input, i) => {
+        input.placeholder = `Question ${i + 1}`;
         });
     }
 
     updateCount() {
         if (!this.countEl) return;
-        const sections = this.listEl?.querySelectorAll(".section-card") || [];
-        this.countEl.textContent = `${sections.length} section${sections.length === 1 ? "" : "s"}`;
+        const count = this.listEl?.querySelectorAll('.section-card').length || 0;
+        this.countEl.textContent = `${count} section${count === 1 ? '' : 's'}`;
     }
 
     values() {
         const sections = [];
-        this.listEl?.querySelectorAll(".section-card").forEach((sectionEl) => {
-            const titleInput = sectionEl.querySelector(".section-title-input");
-            const questions = Array.from(sectionEl.querySelectorAll(".section-questions input"))
-                .map((input) => input.value.trim())
-                .filter(Boolean);
-            if (questions.length === 0) {
-                return;
-            }
-            sections.push({
-                title: titleInput?.value.trim() || "Untitled section",
-                questions,
-            });
+        
+        this.listEl?.querySelectorAll('.section-card').forEach(el => {
+        const title = el.querySelector('.section-title-input')?.value.trim() || 'Untitled section';
+        const questions = Array.from(el.querySelectorAll('.section-questions input'))
+            .map(input => input.value.trim())
+            .filter(Boolean);
+        
+        if (questions.length) {
+            sections.push({ title, questions });
+        }
         });
+        
         return sections;
     }
-}
+    }
 
-class InterviewBuilderApp {
+    // ============================================================
+    // INTERVIEW BUILDER APP
+    // ============================================================
+
+    class InterviewBuilderApp {
     constructor() {
-        this.form = document.getElementById("interview-form");
-        this.addSectionBtn = document.getElementById("add-section");
-        this.sectionList = document.getElementById("section-list");
-        this.sectionCount = document.getElementById("section-count");
-        this.toast = new Toast(document.getElementById("toast"));
+        this.form = document.getElementById('interview-form');
+        this.addSectionBtn = document.getElementById('add-section');
+        this.sectionList = document.getElementById('section-list');
+        this.sectionCount = document.getElementById('section-count');
         this.submitBtn = this.form?.querySelector("button[type='submit']");
+        this.toast = new Toast(document.getElementById('toast'));
+        
         this.sectionManager = new SectionManager(this.sectionList, this.sectionCount);
         this.sectionManager.addSection();
+        
         this.bindEvents();
-        builderLog("Builder initialized");
+        builderLog('Builder initialized');
     }
 
     bindEvents() {
-        this.addSectionBtn?.addEventListener("click", () => this.sectionManager.addSection());
-        this.form?.addEventListener("submit", (event) => this.handleSubmit(event));
-    }
-
-    collectPayload() {
-        const formData = new FormData(this.form);
-        const title = (formData.get("title") || "").toString().trim();
-
-        if (!title) {
-            this.toast.show("Enter an interview title");
-            return null;
-        }
-
-        const payload = {
-            title,
-            sections: this.sectionManager.values(),
-        };
-
-        if (!payload.sections.length) {
-            this.toast.show("Add at least one question to your sections");
-            return null;
-        }
-
-        builderLog("Collected payload", payload);
-        return payload;
+        this.addSectionBtn?.addEventListener('click', () => this.sectionManager.addSection());
+        this.form?.addEventListener('submit', e => this.handleSubmit(e));
     }
 
     async handleSubmit(event) {
         event.preventDefault();
-        if (!this.form) return;
+        
+        const title = new FormData(this.form).get('title')?.toString().trim();
+        
+        if (!title) {
+        this.toast.show('Enter an interview title');
+        return;
+        }
 
-        const payload = this.collectPayload();
-        if (!payload) return;
+        const sections = this.sectionManager.values();
+        
+        if (!sections.length) {
+        this.toast.show('Add at least one question to your sections');
+        return;
+        }
+
+        const payload = { title, sections };
+        builderLog('Collected payload', payload);
 
         try {
-            this.setLoading(true);
-            builderLog("Submitting interview creation");
-            const response = await fetch("/api/interviews/", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
-            });
+        this.setLoading(true);
+        
+        const response = await fetch('/api/interviews/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
 
-            const data = await response.json().catch(() => ({}));
-            if (!response.ok) {
-                builderLog("Interview creation failed", data);
-                throw new Error(data.error || "Failed to create interview");
-            }
+        const data = await response.json().catch(() => ({}));
+        
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to create interview');
+        }
 
-            builderLog("Interview created", data);
-            this.toast.show("Interview saved");
-            setTimeout(() => window.location.reload(), 800);
-        } catch (error) {
-            builderLog("Creation error", error);
-            this.toast.show(error.message || "Something went wrong");
+        builderLog('Interview created', data);
+        this.toast.show('Interview saved');
+        setTimeout(() => location.reload(), 800);
+        
+        } catch (err) {
+        builderLog('Creation error', err);
+        this.toast.show(err.message || 'Something went wrong');
         } finally {
-            this.setLoading(false);
+        this.setLoading(false);
         }
     }
 
-    setLoading(state) {
+    setLoading(loading) {
         if (!this.submitBtn) return;
-        this.submitBtn.disabled = state;
-        this.submitBtn.textContent = state ? "Saving..." : "Save interview";
+        this.submitBtn.disabled = loading;
+        this.submitBtn.textContent = loading ? 'Saving...' : 'Save interview';
     }
-}
+    }
 
-class ExistingInterviewManager {
+    // ============================================================
+    // EXISTING INTERVIEW MANAGER
+    // ============================================================
+
+    class ExistingInterviewManager {
     constructor(toast) {
         this.toast = toast;
-        this.bindQuestionDeletes();
-        this.bindInterviewDeletes();
-        this.bindStartButtons();
-        this.bindInviteButtons();
+        this.csrfToken = this.getCSRFToken();
+        this.init();
     }
 
-    bindQuestionDeletes() {
-        document.querySelectorAll(".delete-question-btn").forEach((btn) => {
-            if (btn._wired) return;
-            btn._wired = true;
-            btn.addEventListener("click", () => this.handleDeleteQuestion(btn));
+    getCSRFToken() {
+        const match = document.cookie.match(/csrftoken=([^;]+)/);
+        return match ? decodeURIComponent(match[1]) : '';
+    }
+
+    init() {
+        this.bindAll('.delete-question-btn', e => this.handleDeleteQuestion(e.target));
+        this.bindAll('.delete-interview-btn', e => this.handleDeleteInterview(e.target));
+        this.bindAll('.start-interview-btn', e => this.handleStartInterview(e.target));
+        this.bindAll('.invite-link-btn', e => this.handleCopyInvite(e.target));
+    }
+
+    bindAll(selector, handler) {
+        document.querySelectorAll(selector).forEach(btn => {
+        if (btn._bound) return;
+        btn._bound = true;
+        btn.addEventListener('click', handler);
         });
     }
 
-    bindInterviewDeletes() {
-        document.querySelectorAll(".delete-interview-btn").forEach((btn) => {
-            if (btn._wired) return;
-            btn._wired = true;
-            btn.addEventListener("click", () => this.handleDeleteInterview(btn));
+    async apiCall(url, method = 'GET') {
+        const response = await fetch(url, {
+        method,
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': this.csrfToken
+        }
         });
+        
+        const data = await response.json().catch(() => ({}));
+        
+        if (!response.ok) {
+        throw new Error(data.error || `Request failed`);
+        }
+        
+        return data;
     }
 
-    async handleDeleteQuestion(button) {
-        const questionId = button.dataset.questionId;
-        const card = button.closest(".interview-card");
+    async handleDeleteQuestion(btn) {
+        const questionId = btn.dataset.questionId;
+        const card = btn.closest('.interview-card');
         const interviewId = card?.dataset?.interviewId;
+        
         if (!questionId || !interviewId) return;
-        if (!window.confirm("Delete this question from the interview?")) return;
+        if (!confirm('Delete this question from the interview?')) return;
 
-        const questionItem = button.closest(".question-item");
-
-        button.disabled = true;
-        const originalLabel = button.textContent;
-        button.textContent = "...";
+        const original = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = '...';
 
         try {
-            const response = await fetch(
-                `/api/interviews/${interviewId}/questions/${questionId}/`,
-                { method: "DELETE" }
-            );
-            const data = await response.json().catch(() => ({}));
-
-            if (!response.ok) {
-                throw new Error(data.error || "Failed to delete question");
-            }
-
-            questionItem?.remove();
-            this.toast?.show?.("Question deleted");
-            setTimeout(() => window.location.reload(), 600);
-        } catch (error) {
-            console.error("Delete question failed", error);
-            this.toast?.show?.(error.message || "Delete failed");
-        } finally {
-            button.disabled = false;
-            button.textContent = originalLabel;
+        await this.apiCall(`/api/interviews/${interviewId}/questions/${questionId}/`, 'DELETE');
+        btn.closest('.question-item')?.remove();
+        this.toast?.show?.('Question deleted');
+        setTimeout(() => location.reload(), 600);
+        } catch (err) {
+        this.toast?.show?.(err.message || 'Delete failed');
+        btn.disabled = false;
+        btn.textContent = original;
         }
     }
 
+    async handleDeleteInterview(btn) {
+        const interviewId = btn.dataset.interviewId;
+        const title = btn.dataset.interviewTitle || 'this interview';
+        
+        if (!interviewId) return;
+        if (!confirm(`Delete "${title}"? This removes the interview and its questions.`)) return;
 
-    async handleDeleteInterview(button) {
-        const interviewId = button.dataset.interviewId;
+        const original = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Deleting...';
+
+        try {
+        const data = await this.apiCall(`/api/interviews/${interviewId}/`, 'DELETE');
+        btn.closest('.interview-card')?.remove();
+        this.updateCount(data.remaining_interviews);
+        this.toast?.show?.('Interview deleted');
+        } catch (err) {
+        this.toast?.show?.(err.message || 'Delete failed');
+        btn.disabled = false;
+        btn.textContent = original;
+        }
+    }
+
+    async handleStartInterview(btn) {
+    const interviewId = btn.dataset.interviewId;
+    if (!interviewId) return;
+
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Preparing...';
+
+    try {
+        const data = await this.apiCall(`/api/interviews/${interviewId}/links/`, 'POST');
+        this.toast?.show?.('Opening interview...');
+        window.location.assign(data.invite_url);
+        } catch (err) {
+        this.toast?.show?.(err.message || 'Could not create link');
+        btn.disabled = false;
+        btn.textContent = original;
+        }
+    }
+
+    async handleCopyInvite(btn) {
+        const interviewId = btn.dataset.interviewId;
         if (!interviewId) return;
 
-        const title = button.dataset.interviewTitle || "this interview";
-        if (
-            !window.confirm(
-                `Delete "${title}"? This removes the interview and its questions (responses stay saved).`
-            )
-        ) {
-            return;
-        }
-
-        const card = button.closest(".interview-card");
-        const originalText = button.textContent;
-        button.disabled = true;
-        button.textContent = "Deleting...";
+        const original = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Generating...';
 
         try {
-            const response = await fetch(`/api/interviews/${interviewId}/`, {
-                method: "DELETE",
-            });
-            const data = await response.json().catch(() => ({}));
-            if (!response.ok) {
-                throw new Error(data.error || "Failed to delete interview");
-            }
-
-            card?.remove();
-            this.updateExistingCount(data.remaining_interviews);
-            this.toast?.show?.("Interview deleted");
-        } catch (error) {
-            console.error("Delete interview failed", error);
-            this.toast?.show?.(error.message || "Delete failed");
+        const data = await this.apiCall(`/api/interviews/${interviewId}/links/`, 'POST');
+        await navigator.clipboard.writeText(data.invite_url);
+        btn.textContent = 'Link copied';
+        this.toast?.show?.('Invite link copied to clipboard');
+        setTimeout(() => { btn.textContent = 'Generate URL'; }, 1500);
+        } catch (err) {
+        this.toast?.show?.(err.message || 'Could not create link');
+        btn.textContent = original;
         } finally {
-            button.disabled = false;
-            button.textContent = originalText;
+        btn.disabled = false;
         }
     }
 
-    bindStartButtons() {
-        document.querySelectorAll(".start-interview-btn").forEach((btn) => {
-            if (btn._wired) return;
-            btn._wired = true;
-            btn.addEventListener("click", () => this.handleStartInterview(btn));
-        });
-    }
-
-    bindInviteButtons() {
-        document.querySelectorAll(".invite-link-btn").forEach((btn) => {
-            if (btn._wired) return;
-            btn._wired = true;
-            btn.addEventListener("click", () => this.handleCopyInvite(btn));
-        });
-    }
-
-    getCsrfToken() {
-        const name = "csrftoken=";
-        const cookies = document.cookie.split(";");
-        for (let cookie of cookies) {
-            cookie = cookie.trim();
-            if (cookie.startsWith(name)) {
-                return decodeURIComponent(cookie.substring(name.length));
-            }
-        }
-        return "";
-    }
-
-    async handleStartInterview(button) {
-        const interviewId = button.dataset.interviewId;
-        if (!interviewId) return;
-        const originalText = button.textContent;
-        try {
-            button.disabled = true;
-            button.textContent = "Preparing...";
-            const response = await fetch(`/api/interviews/${interviewId}/links/`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-CSRFToken": this.getCsrfToken(),
-                },
-            });
-            const data = await response.json().catch(() => ({}));
-            if (!response.ok) {
-                throw new Error(data.error || "Failed to generate link");
-            }
-            this.toast?.show?.("Opening interview...");
-            window.location.assign(data.invite_url);
-        } catch (error) {
-            console.error("Invite link failed", error);
-            this.toast?.show?.(error.message || "Could not create link");
-        } finally {
-            button.disabled = false;
-            button.textContent = originalText;
-        }
-    }
-
-    async handleCopyInvite(button) {
-        const interviewId = button.dataset.interviewId;
-        if (!interviewId) return;
-
-        const originalText = button.textContent;
-        try {
-            button.disabled = true;
-            button.textContent = "Generating...";
-            const response = await fetch(`/api/interviews/${interviewId}/links/`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-CSRFToken": this.getCsrfToken(),
-                },
-            });
-            const data = await response.json().catch(() => ({}));
-            if (!response.ok) {
-                throw new Error(data.error || "Failed to generate link");
-            }
-            await navigator.clipboard.writeText(data.invite_url);
-            button.textContent = "Link copied";
-            this.toast?.show?.("Invite link copied to clipboard");
-        } catch (error) {
-            console.error("Invite link failed", error);
-            this.toast?.show?.(error.message || "Could not create link");
-            button.textContent = originalText;
-        } finally {
-            button.disabled = false;
-            setTimeout(() => (button.textContent = "Generate URL"), 1500);
-        }
-    }
-
-    updateExistingCount(serverCount) {
-        const currentCount =
-            typeof serverCount === "number"
-                ? serverCount
-                : document.querySelectorAll(".interview-card").length;
-        const label = document.getElementById("existing-count-label");
-        if (label && currentCount >= 0) {
-            label.textContent = `${currentCount} configured \u00b7 reuse an interview to keep your AI prompts consistent.`;
+    updateCount(serverCount) {
+        const count = serverCount ?? document.querySelectorAll('.interview-card').length;
+        const label = document.getElementById('existing-count-label');
+        
+        if (label && count >= 0) {
+        label.textContent = `${count} configured · reuse an interview to keep your AI prompts consistent.`;
         }
 
-        const list = document.querySelector(".interview-list");
-        if (currentCount === 0) {
-            if (list) {
-                list.innerHTML = `
-                    <div class="empty-state">
-                        <p>No interviews yet.</p>
-                        <p class="muted-text">Use the form to create your first question set.</p>
-                    </div>
-                `;
-            }
-            this.toast?.show?.("Creating a starter interview...");
-            setTimeout(() => window.location.reload(), 800);
-            return;
+        if (count === 0) {
+        const list = document.querySelector('.interview-list');
+        if (list) {
+            list.innerHTML = `
+            <div class="empty-state">
+                <p>No interviews yet.</p>
+                <p class="muted-text">Use the form to create your first question set.</p>
+            </div>
+            `;
+        }
+        this.toast?.show?.('Creating a starter interview...');
+        setTimeout(() => location.reload(), 800);
         }
     }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-    const builder = new InterviewBuilderApp();
-    new ExistingInterviewManager(builder.toast);
+// ============================================================
+// INITIALIZATION
+// ============================================================
+
+    document.addEventListener('DOMContentLoaded', () => {
+  const builder = new InterviewBuilderApp();
+  new ExistingInterviewManager(builder.toast);
 });
