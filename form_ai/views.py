@@ -104,6 +104,7 @@ STOPWORDS = {
     "tell",
     "me",
     "us",
+    "s",
 }
 QUESTION_INTENT_CACHE: dict[str, dict[str, Any]] = {}
 
@@ -479,8 +480,6 @@ def interview_builder(request):
         entries = interview.get_question_entries()
         interview.question_rows = entries
         interview.question_sections = InterviewFlow.to_section_groups(entries)
-    print(f"[INTERVIEW_BUILDER] Loaded {len(interviews)} interviews")
-
     return render(
         request,
         "form_ai/interviews.html",
@@ -505,8 +504,6 @@ def voice_page(request, interview_id: str | None = None):
     ]
 
     verification_fields, _ = get_verification_schema(interview)
-
-    print(f"[VOICE_PAGE] Loaded interview {interview.id} for realtime session")
 
     return render(
         request,
@@ -576,6 +573,7 @@ def view_responses(request):
     for interview in interviews:
         entries = interview.get_question_entries()
         interview.question_sections = InterviewFlow.to_section_groups(entries)
+        interview.question_count = len(entries)
         interview_groups.append(
             {
                 "interview": interview,
@@ -632,11 +630,6 @@ def create_interview(request):
     interview = InterviewFlow.create_form(
         title=title,
         sections=sections,
-    )
-
-    print(
-        f"[CREATE_INTERVIEW] Created interview {interview.id} "
-        f"({len(interview.get_question_entries())} questions)"
     )
 
     return json_ok(

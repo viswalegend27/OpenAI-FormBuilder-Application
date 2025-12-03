@@ -222,7 +222,7 @@ class InterviewBuilderApp {
     setLoading(state) {
         if (!this.submitBtn) return;
         this.submitBtn.disabled = state;
-        this.submitBtn.textContent = state ? "Saving..." : "Save & start interview";
+        this.submitBtn.textContent = state ? "Saving..." : "Save interview";
     }
 }
 

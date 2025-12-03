@@ -230,7 +230,7 @@ class ResponseManager {
         this.on('.delete-btn', 'click', (e) => this.handleDelete(e.currentTarget.dataset.convId));
         this.on('.start-interview-btn', 'click', (e) => this.handleStartInterview(e.currentTarget));
         this.on('.delete-interview-btn', 'click', (e) => this.handleDeleteInterview(e.currentTarget));
-        this.on('.delete-question-btn', 'click', (e) => this.handleDeleteQuestion(e.currentTarget));
+        this.on('.toggle-responses-btn', 'click', (e) => this.handleToggleResponses(e.currentTarget));
 
         this.onClick('saveEditBtn', () => this.handleSaveEdit());
         this.onClick('confirmDeleteBtn', () => this.handleConfirmDelete());
@@ -289,20 +289,6 @@ class ResponseManager {
                     </div>
                 ` : '<p class="muted-text">No candidate information available</p>'}
             </div>
-            ${messages.length > 0 ? `
-                <div class="view-section">
-                    <h3>Conversation (${messages.length} messages)</h3>
-                    <div class="messages-preview">
-                        ${messages.slice(0, 5).map(msg => `
-                            <div class="message-item">
-                                <strong>${Utils.sanitizeHTML(msg.role || 'unknown')}:</strong>
-                                ${Utils.sanitizeHTML(Utils.truncate(msg.content || '', 150))}
-                            </div>
-                        `).join('')}
-                        ${messages.length > 5 ? `<p class="muted-text">... and ${messages.length - 5} more</p>` : ''}
-                    </div>
-                </div>
-            ` : ''}
         `;
     }
 
@@ -470,24 +456,17 @@ class ResponseManager {
         }
     }
 
-    async handleDeleteQuestion(button) {
-        const interviewId = button.dataset.interviewId;
-        const questionId = button.dataset.questionId;
-        if (!interviewId || !questionId) return;
-        if (!window.confirm('Delete this question from the interview?')) return;
-
-        const originalText = button.textContent;
-        try {
-            button.disabled = true;
-            button.textContent = '...';
-            await this.api.deleteInterviewQuestion(interviewId, questionId);
-            this.toast.show('Question deleted', 'success');
-            window.location.reload();
-        } catch (error) {
-            this.toast.show(error.message || 'Delete failed', 'error');
-        } finally {
-            button.disabled = false;
-            button.textContent = originalText;
+    handleToggleResponses(button) {
+        const targetId = button.dataset.target;
+        const panel = document.getElementById(targetId);
+        if (!panel) return;
+        const isHidden = panel.hasAttribute('hidden');
+        if (isHidden) {
+            panel.removeAttribute('hidden');
+            button.textContent = button.textContent.replace('View', 'Hide');
+        } else {
+            panel.setAttribute('hidden', '');
+            button.textContent = button.textContent.replace('Hide', 'View');
         }
     }
 }
