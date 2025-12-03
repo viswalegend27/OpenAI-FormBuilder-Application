@@ -290,11 +290,11 @@ class ExistingInterviewManager {
                 : document.querySelectorAll(".interview-card").length;
         const label = document.getElementById("existing-count-label");
         if (label && currentCount >= 0) {
-            label.textContent = `${currentCount} configured · reuse an interview to keep your AI prompts consistent.`;
+            label.textContent = `${currentCount} configured \u00b7 reuse an interview to keep your AI prompts consistent.`;
         }
 
+        const list = document.querySelector(".interview-list");
         if (currentCount === 0) {
-            const list = document.querySelector(".interview-list");
             if (list) {
                 list.innerHTML = `
                     <div class="empty-state">
@@ -303,6 +303,9 @@ class ExistingInterviewManager {
                     </div>
                 `;
             }
+            this.toast?.show?.("Creating a starter interview...");
+            setTimeout(() => window.location.reload(), 800);
+            return;
         }
     }
 }

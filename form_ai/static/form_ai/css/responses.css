@@ -138,26 +138,6 @@
     transform: translateX(-10px);
 }
 
-.status-pill {
-    padding: 0.35rem 1rem;
-    border-radius: 999px;
-    font-weight: 600;
-    font-size: 0.85rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.status-pill.success {
-    background: rgba(15, 130, 140, 0.12);
-    color: var(--accent);
-}
-
-.status-pill.muted {
-    background: rgba(91, 100, 116, 0.12);
-    color: var(--muted);
-}
-
 .assessment-header {
     display: flex;
     justify-content: space-between;

@@ -13,6 +13,18 @@ from .views_schema_ import AssessmentExtractor, RoleQuestionGenerator
 
 logger = logging.getLogger(__name__)
 
+# Auto-generated starter interview template used when the workspace is empty.
+STARTER_INTERVIEW_TEMPLATE = {
+    "title": "Sample Interview Plan",
+    "summary": "Starter interview generated automatically. Update it to match your role.",
+    "ai_prompt": "",
+    "questions": [
+        "Can you introduce yourself and share your current focus area?",
+        "Tell me about a recent project that best represents your strengths.",
+        "What tools or languages are you most comfortable working with right now?",
+    ],
+}
+
 
 class InterviewFlow:
     """Operations tied to InterviewForm nodes."""
@@ -89,6 +101,28 @@ class InterviewFlow:
             remaining,
         )
         return remaining
+
+    @staticmethod
+    def ensure_seed_interview() -> InterviewForm | None:
+        """Create a starter interview when none exist so the UI always has content."""
+        if InterviewForm.objects.exists():
+            return None
+
+        template = STARTER_INTERVIEW_TEMPLATE
+        try:
+            interview = InterviewFlow.create_form(
+                title=template["title"],
+                summary=template.get("summary", ""),
+                ai_prompt=template.get("ai_prompt", ""),
+                questions=template["questions"],
+            )
+            logger.info("[FLOW:INTERVIEW] Seeded starter interview %s", interview.id)
+            return interview
+        except AppError as exc:
+            logger.error("[FLOW:INTERVIEW] Failed to seed starter interview: %s", exc)
+        except Exception as exc:  # pragma: no cover - safety log
+            logger.exception("[FLOW:INTERVIEW] Unexpected error seeding interview: %s", exc)
+        return None
 
 
 class ConversationFlow:

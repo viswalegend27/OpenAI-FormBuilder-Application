@@ -500,8 +500,11 @@ def build_display_fields(conversation: VoiceConversation) -> list[dict[str, Any]
 
 def interview_builder(request):
     """Render interview creation and listing page."""
-    interviews_queryset = InterviewForm.objects.order_by("-updated_at")
-    interviews = list(interviews_queryset)
+    interviews = list(InterviewForm.objects.order_by("-updated_at"))
+    if not interviews:
+        InterviewFlow.ensure_seed_interview()
+        interviews = list(InterviewForm.objects.order_by("-updated_at"))
+
     for interview in interviews:
         interview.question_rows = interview.get_question_entries()
     print(f"[INTERVIEW_BUILDER] Loaded {len(interviews)} interviews")

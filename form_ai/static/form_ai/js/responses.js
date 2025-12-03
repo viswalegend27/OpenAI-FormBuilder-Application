@@ -475,12 +475,6 @@ class ResponseManager {
             }
         }
 
-        const statusPill = document.querySelector(`.status-pill[data-status-pill="${convId}"]`);
-        if (statusPill) {
-            statusPill.textContent = remaining > 0 ? 'Generated' : 'Pending';
-            statusPill.classList.toggle('success', remaining > 0);
-            statusPill.classList.toggle('muted', remaining === 0);
-        }
     }
 
     showEmptyState() {

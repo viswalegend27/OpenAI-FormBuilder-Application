@@ -97,13 +97,10 @@
                         <button class="control-btn primary generate-assessment-btn"
                             data-conv-id="{{ conv.id }}">Generate Assessment</button>
                         {% if assessment_count %}
-                        <span class="status-pill success" data-status-pill="{{ conv.id }}">Generated</span>
                         <button class="control-btn secondary view-assessments-btn"
                             data-conv-id="{{ conv.id }}" data-assessment-count="{{ assessment_count }}">
                             View Assessments ({{ assessment_count }})
                         </button>
-                        {% else %}
-                        <span class="status-pill muted" data-status-pill="{{ conv.id }}">Pending</span>
                         {% endif %}
                     </div>
 
