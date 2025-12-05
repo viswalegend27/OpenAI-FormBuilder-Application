@@ -2,6 +2,7 @@
 
 import logging
 import re
+from datetime import datetime
 from typing import Any, Dict, List
 from django.core.signing import TimestampSigner, BadSignature, SignatureExpired
 from django.db import transaction
@@ -17,7 +18,6 @@ from .models import InterviewForm, VoiceConversation
 from .workflow import ConversationFlow, InterviewFlow
 from .views_schema_ import (
     OpenAIClient,
-    QuestionIntentSummarizer,
     get_object_or_fail,
     handle_view_errors,
     safe_json_parse,
@@ -25,6 +25,17 @@ from .views_schema_ import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def localtime_safe(value: datetime | None):
+    """Convert aware datetimes to the configured local timezone."""
+    return timezone.localtime(value) if value else None
+
+
+def format_local_datetime(value: datetime | None, pattern: str = "%B %d, %Y - %I:%M %p") -> str | None:
+    """Return timeline strings formatted in 12-hour IST."""
+    localized = localtime_safe(value)
+    return localized.strftime(pattern) if localized else None
 
 
 # ============================================================================
@@ -109,6 +120,22 @@ STOPWORDS = {
 }
 QUESTION_INTENT_CACHE: dict[str, dict[str, Any]] = {}
 
+QUESTION_TOPIC_KEYWORDS = {
+    "experience": "Experience",
+    "qualification": "Qualification",
+    "education": "Education",
+    "degree": "Education",
+    "skill": "Skills",
+    "skills": "Skills",
+    "language": "Language",
+    "project": "Projects",
+    "role": "Role",
+    "strength": "Strengths",
+    "weakness": "Weaknesses",
+    "availability": "Availability",
+    "salary": "Compensation",
+}
+
 BASE_VERIFICATION_FIELDS: list[dict[str, Any]] = [
     {
         "key": "name",
@@ -192,6 +219,24 @@ def derive_concept_label(question_text: str) -> str:
     return " ".join(word.capitalize() for word in concept_words)
 
 
+def summarize_question_text(question_text: str) -> str:
+    """Trim question text to a concise summary."""
+    cleaned = (question_text or "").strip()
+    if len(cleaned) <= 160:
+        return cleaned
+    trimmed = cleaned[:157].rsplit(" ", 1)[0]
+    return trimmed + "..."
+
+
+def derive_topic_from_text(question_text: str) -> str | None:
+    """Guess an intent topic using keyword matches."""
+    lowered = (question_text or "").lower()
+    for keyword, topic in QUESTION_TOPIC_KEYWORDS.items():
+        if keyword in lowered:
+            return topic
+    return None
+
+
 def normalize_field_label(question_text: str, metadata_label: str | None) -> str:
     """Enforce concise title-style labels, falling back to heuristics if needed."""
     candidate = (metadata_label or "").strip()
@@ -229,7 +274,7 @@ def ensure_unique_key(base_key: str, used_keys: set[str]) -> str:
 def summarize_question_intents(
     interview: InterviewForm, questions: list[dict[str, Any]]
 ) -> dict[str, dict[str, str]]:
-    """Use the LLM-driven summarizer with lightweight caching."""
+    """Return lightweight heuristic summaries for interview questions."""
     cache_key = str(interview.id)
     freshness_token = f"{interview.updated_at.timestamp()}:{len(questions)}"
 
@@ -237,25 +282,22 @@ def summarize_question_intents(
     if cached and cached.get("token") == freshness_token:
         return cached["data"]
 
-    summarizer = QuestionIntentSummarizer()
-    payload = []
-    for question in questions:
-        text = (question.get("text") or "").strip()
-        if not text:
+    summaries: dict[str, dict[str, str]] = {}
+    for idx, question in enumerate(questions, start=1):
+        question_id = str(question.get("id") or idx)
+        question_text = (question.get("text") or question.get("question") or "").strip()
+        if not question_text:
             continue
-        payload.append(
-            {
-                "id": str(question.get("id")),
-                "question": text,
-                "sequence": question.get("sequence_number"),
-            }
-        )
 
-    try:
-        summaries = summarizer.summarize(payload)
-    except Exception as exc:  # pragma: no cover - defensive path
-        logger.warning("[QUESTION_INTENT] Failed to summarize: %s", exc)
-        summaries = {item["id"]: {} for item in payload}
+        label = derive_concept_label(question_text) or f"Question {idx}"
+        fallback_key = f"question_{question.get('sequence_number') or idx}"
+        key = slugify_field_key(label, fallback=fallback_key)
+        summaries[question_id] = {
+            "label": label,
+            "key": key,
+            "summary": summarize_question_text(question_text),
+            "topic": derive_topic_from_text(question_text),
+        }
 
     QUESTION_INTENT_CACHE[cache_key] = {"token": freshness_token, "data": summaries}
     return summaries
@@ -702,7 +744,11 @@ def save_conversation(request):
             "conversation_id": conversation.pk,
             "session_id": session_id,
             "interview_id": str(interview_form.id) if interview_form else None,
-            "created_at": conversation.created_at.isoformat(),
+            "created_at": (
+                localtime_safe(conversation.created_at).isoformat()
+                if conversation.created_at
+                else None
+            ),
         }
     )
 
@@ -770,8 +816,8 @@ def view_response(request, conv_id: int):
     return json_ok(
         {
             "response_number": response_number,
-            "created_at": conversation.created_at.strftime("%B %d, %Y - %H:%M"),
-            "updated_at": conversation.updated_at.strftime("%B %d, %Y - %H:%M"),
+            "created_at": format_local_datetime(conversation.created_at),
+            "updated_at": format_local_datetime(conversation.updated_at),
             "user_response": conversation.extracted_info,  # Keep key name for frontend compatibility
             "field_labels": get_field_label_map(conversation.interview_form),
             "messages": conversation.messages,
@@ -806,7 +852,7 @@ def edit_response(request, conv_id: int):
         {
             "conversation_id": conversation.pk,
             "user_response": conversation.extracted_info,
-            "updated_at": conversation.updated_at.isoformat(),
+            "updated_at": format_local_datetime(conversation.updated_at),
         }
     )
 
