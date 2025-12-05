@@ -17,7 +17,6 @@ from .helper.views_helper import AppError, json_ok
 from .models import InterviewForm, VoiceConversation
 from .workflow import ConversationFlow, InterviewFlow
 from .views_schema_ import (
-    IntentAnalyzer,
     OpenAIClient,
     get_object_or_fail,
     handle_view_errors,
@@ -538,18 +537,6 @@ def create_realtime_session(request):
     payload = build_session_payload(request)
     session_data = client.create_realtime_session(payload)
     return json_ok(session_data)
-
-
-@csrf_exempt
-@require_POST
-@handle_view_errors("Failed to analyze intent")
-def analyze_user_intent(request):
-    """Classify a free-form message into standard intents."""
-    body = safe_json_parse(request.body)
-    message = validate_field(body, "message", str)
-    analyzer = IntentAnalyzer()
-    result = analyzer.analyze(message)
-    return json_ok(result)
 
 
 # ============================================================================
