@@ -34,6 +34,7 @@ urlpatterns = [
         views.analyze_conversation,
         name="analyze_conversation",
     ),
+    path("api/intent/", views.analyze_user_intent, name="analyze_user_intent"),
     # Response management
     path("responses/<int:conv_id>/view/", views.view_response, name="view_response"),
     path("responses/<int:conv_id>/edit/", views.edit_response, name="edit_response"),

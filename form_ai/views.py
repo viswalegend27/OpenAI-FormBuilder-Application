@@ -17,6 +17,7 @@ from .helper.views_helper import AppError, json_ok
 from .models import InterviewForm, VoiceConversation
 from .workflow import ConversationFlow, InterviewFlow
 from .views_schema_ import (
+    IntentAnalyzer,
     OpenAIClient,
     get_object_or_fail,
     handle_view_errors,
@@ -75,66 +76,7 @@ voice_token_manager = VoiceInviteTokenManager()
 # ============================================================================
 
 SLUG_PATTERN = re.compile(r"[^a-z0-9_]+")
-QUESTION_PREFIXES = [
-    "what is your",
-    "what's your",
-    "what are your",
-    "what are the",
-    "what is the",
-    "what's the",
-    "what would be your",
-    "what would you say is your",
-    "what are you",
-    "what kind of",
-    "what types of",
-    "tell me about your",
-    "tell us about your",
-    "tell me about the",
-    "tell us about the",
-    "can you describe your",
-    "can you describe the",
-    "describe your",
-    "describe the",
-    "do you have any",
-]
-STOPWORDS = {
-    "your",
-    "the",
-    "any",
-    "of",
-    "for",
-    "you",
-    "about",
-    "please",
-    "kind",
-    "type",
-    "types",
-    "are",
-    "is",
-    "do",
-    "can",
-    "tell",
-    "me",
-    "us",
-    "s",
-}
 QUESTION_INTENT_CACHE: dict[str, dict[str, Any]] = {}
-
-QUESTION_TOPIC_KEYWORDS = {
-    "experience": "Experience",
-    "qualification": "Qualification",
-    "education": "Education",
-    "degree": "Education",
-    "skill": "Skills",
-    "skills": "Skills",
-    "language": "Language",
-    "project": "Projects",
-    "role": "Role",
-    "strength": "Strengths",
-    "weakness": "Weaknesses",
-    "availability": "Availability",
-    "salary": "Compensation",
-}
 
 BASE_VERIFICATION_FIELDS: list[dict[str, Any]] = [
     {
@@ -189,36 +131,6 @@ def slugify_field_key(value: str, fallback: str = "field") -> str:
     return value
 
 
-def fallback_question_label(text: str) -> str:
-    """Derive a short label from the original question text."""
-    cleaned = (text or "").strip()
-    cleaned = re.sub(r"[\?\.:]+$", "", cleaned)
-    if len(cleaned) > 70:
-        cleaned = cleaned[:67].rsplit(" ", 1)[0] + "..."
-    return cleaned or "Response"
-
-
-def strip_question_prefix(text: str) -> str:
-    lowered = text.lower()
-    for prefix in QUESTION_PREFIXES:
-        if lowered.startswith(prefix):
-            return text[len(prefix) :].strip()
-    return text.strip()
-
-
-def derive_concept_label(question_text: str) -> str:
-    """Heuristic fallback to convert a question into a short noun phrase."""
-    working = strip_question_prefix(question_text)
-    working = re.sub(r"[^\w\s]", " ", working).lower()
-    words = [word for word in working.split() if word]
-    filtered = [w for w in words if w not in STOPWORDS]
-    candidates = filtered or words
-    if not candidates:
-        return fallback_question_label(question_text)
-    concept_words = candidates[:4]
-    return " ".join(word.capitalize() for word in concept_words)
-
-
 def summarize_question_text(question_text: str) -> str:
     """Trim question text to a concise summary."""
     cleaned = (question_text or "").strip()
@@ -228,36 +140,16 @@ def summarize_question_text(question_text: str) -> str:
     return trimmed + "..."
 
 
-def derive_topic_from_text(question_text: str) -> str | None:
-    """Guess an intent topic using keyword matches."""
-    lowered = (question_text or "").lower()
-    for keyword, topic in QUESTION_TOPIC_KEYWORDS.items():
-        if keyword in lowered:
-            return topic
-    return None
-
-
 def normalize_field_label(question_text: str, metadata_label: str | None) -> str:
     """Enforce concise title-style labels, falling back to heuristics if needed."""
     candidate = (metadata_label or "").strip()
-    question_clean = (question_text or "").strip()
-
     if not candidate:
-        candidate = derive_concept_label(question_clean)
-
-    normalized = re.sub(r"[\?\.:]+$", "", candidate).strip()
-    normalized = re.sub(r"\s+", " ", normalized)
-
-    # If the model simply echoed the question or produced a very long label, fall back.
-    if (
-        not normalized
-        or len(normalized) > 40
-        or normalized.lower() == question_clean.lower()
-        or normalized.count(" ") >= 5
-    ):
-        normalized = derive_concept_label(question_clean)
-
-    return normalized
+        candidate = (question_text or "Response").strip()
+    candidate = re.sub(r"[\?\.:]+$", "", candidate).strip()
+    candidate = re.sub(r"\s+", " ", candidate)
+    if len(candidate) > 40:
+        candidate = candidate[:37].rsplit(" ", 1)[0] + "..."
+    return candidate or "Response"
 
 
 def ensure_unique_key(base_key: str, used_keys: set[str]) -> str:
@@ -274,7 +166,7 @@ def ensure_unique_key(base_key: str, used_keys: set[str]) -> str:
 def summarize_question_intents(
     interview: InterviewForm, questions: list[dict[str, Any]]
 ) -> dict[str, dict[str, str]]:
-    """Return lightweight heuristic summaries for interview questions."""
+    """Generate lightweight summaries using question text only."""
     cache_key = str(interview.id)
     freshness_token = f"{interview.updated_at.timestamp()}:{len(questions)}"
 
@@ -288,15 +180,12 @@ def summarize_question_intents(
         question_text = (question.get("text") or question.get("question") or "").strip()
         if not question_text:
             continue
-
-        label = derive_concept_label(question_text) or f"Question {idx}"
         fallback_key = f"question_{question.get('sequence_number') or idx}"
-        key = slugify_field_key(label, fallback=fallback_key)
         summaries[question_id] = {
-            "label": label,
-            "key": key,
+            "label": normalize_field_label(question_text, None),
+            "key": slugify_field_key(question_text, fallback=fallback_key),
             "summary": summarize_question_text(question_text),
-            "topic": derive_topic_from_text(question_text),
+            "topic": None,
         }
 
     QUESTION_INTENT_CACHE[cache_key] = {"token": freshness_token, "data": summaries}
@@ -649,6 +538,18 @@ def create_realtime_session(request):
     payload = build_session_payload(request)
     session_data = client.create_realtime_session(payload)
     return json_ok(session_data)
+
+
+@csrf_exempt
+@require_POST
+@handle_view_errors("Failed to analyze intent")
+def analyze_user_intent(request):
+    """Classify a free-form message into standard intents."""
+    body = safe_json_parse(request.body)
+    message = validate_field(body, "message", str)
+    analyzer = IntentAnalyzer()
+    result = analyzer.analyze(message)
+    return json_ok(result)
 
 
 # ============================================================================

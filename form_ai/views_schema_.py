@@ -231,119 +231,100 @@ class OpenAIClient:
 
 
 # ============================================================================
-# Assessment Extraction Utilities
+# Intent Analysis Utilities
 # ============================================================================
 
-QUESTION_INTENT_SCHEMA = {
-    "name": "InterviewQuestionIntents",
+INTENT_ANALYSIS_SCHEMA = {
+    "name": "UserIntent",
     "schema": {
         "type": "object",
         "additionalProperties": False,
+        "required": ["intent", "confidence", "sentiment", "entities"],
         "properties": {
-            "fields": {
+            "intent": {
+                "type": "string",
+                "enum": ["booking", "inquiry", "complaint", "support", "cancel", "other"],
+            },
+            "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+            "sub_intent": {"type": ["string", "null"]},
+            "entities": {
                 "type": "array",
-                "items": {
-                    "type": "object",
-                    "required": ["id", "label", "key", "summary"],
-                    "additionalProperties": False,
-                    "properties": {
-                        "id": {"type": "string", "description": "Question ID"},
-                        "label": {
-                            "type": "string",
-                            "description": "Short human-friendly name (max 4 words)",
-                        },
-                        "key": {
-                            "type": "string",
-                            "description": "snake_case field name derived from the label",
-                        },
-                        "summary": {
-                            "type": "string",
-                            "description": "One-sentence description of what this field captures",
-                        },
-                        "topic": {
-                            "type": "string",
-                            "description": "Primary competency or topic",
-                        },
-                    },
-                },
-            }
+                "items": {"type": "string"},
+            },
+            "sentiment": {
+                "type": "string",
+                "enum": ["positive", "neutral", "negative"],
+            },
         },
-        "required": ["fields"],
     },
-        "strict": True,
+    "strict": True,
 }
 
-QUESTION_INTENT_SYSTEM_PROMPT = """You are a taxonomy expert who turns interview questions into concise structured field definitions.
-For each question, provide:
-- label: Title-case 1-3 words summarizing the data being collected (no verbs, no leading question words, e.g., "Skill Set", "Preferred Languages").
-- key: snake_case form of the label.
-- summary: One short sentence explaining what should be captured.
-- topic: (optional) core competency keyword (e.g., "Stack", "Communication").
-
-Rules:
-- Never repeat the original question text verbatim.
-- Strip fillers like "What is your", "Can you describe", "Tell me about".
-- Focus on the noun phrase that represents the answer.
-
-Example question:
-{"id": "123", "question": "What is your skill set?", "sequence": 1}
-
-Example output object for that question:
-{"id": "123", "label": "Skill Set", "key": "skill_set", "summary": "Primary technologies and frameworks the candidate can work with.", "topic": "Stack"}
+INTENT_SYSTEM_PROMPT = """Analyze the user's latest message and classify their intent.
+Return:
+- intent: booking | inquiry | complaint | support | cancel | other
+- confidence: float 0-1
+- sub_intent: optional short refinement if useful
+- entities: list of key nouns you detected
+- sentiment: positive | neutral | negative
 """
 
-
-class QuestionIntentSummarizer:
-    """Use LLM to identify the data each interview question tries to capture."""
+class IntentAnalyzer:
+    """Structured intent classification powered by OpenAI."""
 
     def __init__(self, api_key: Optional[str] = None):
-        self.client = None
-        try:
-            self.client = OpenAIClient(api_key)
-        except AppError as exc:
-            logger.info("[QUESTION_INTENT] Disabled summarizer: %s", exc)
-            self.client = None
+        self.client = OpenAIClient(api_key)
 
-    def summarize(self, questions: List[Dict[str, Any]]) -> Dict[str, Dict[str, str]]:
-        if not questions:
-            return {}
-        if not self.client:
-            return {}
+    def analyze(self, message: str) -> Dict[str, Any]:
+        message = (message or "").strip()
+        if not message:
+            raise AppError("Message is required for intent analysis", status=400)
 
-        messages = [
-            {"role": "system", "content": QUESTION_INTENT_SYSTEM_PROMPT},
-            {"role": "user", "content": json.dumps(questions, ensure_ascii=False)},
+        result = self._analyze_via_openai(message)
+        if not result:
+            raise AppError("Intent analysis failed", status=502)
+        return result
+
+    def _analyze_via_openai(self, message: str) -> Optional[Dict[str, Any]]:
+        payload = [
+            {"role": "system", "content": INTENT_SYSTEM_PROMPT},
+            {"role": "user", "content": message},
         ]
-
         try:
             data = self.client.chat_completion(
-                messages=messages,
+                messages=payload,
+                model="gpt-4o-mini",
                 temperature=0.1,
                 response_format={
                     "type": "json_schema",
-                    "json_schema": QUESTION_INTENT_SCHEMA,
+                    "json_schema": INTENT_ANALYSIS_SCHEMA,
                 },
             )
             content = data["choices"][0]["message"]["content"]
             parsed = json.loads(content)
+            return self._normalize_result(parsed)
         except (KeyError, IndexError, json.JSONDecodeError, AppError) as exc:
-            logger.warning(f"[QUESTION_INTENT] Failed to summarize: {exc}")
-            return {}
+            logger.warning("[INTENT] OpenAI classification failed: %s", exc)
+            return None
 
-        results: Dict[str, Dict[str, str]] = {}
-        for item in parsed.get("fields", []):
-            qid = item.get("id")
-            if not qid:
-                continue
-            results[qid] = {
-                "label": item.get("label"),
-                "key": item.get("key"),
-                "summary": item.get("summary"),
-                "topic": item.get("topic"),
-            }
-        return results
-
-
+    @staticmethod
+    def _normalize_result(payload: Dict[str, Any]) -> Dict[str, Any]:
+        intent = payload.get("intent") or "other"
+        sentiment = payload.get("sentiment") or "neutral"
+        entities = payload.get("entities") or []
+        confidence = payload.get("confidence")
+        try:
+            confidence = float(confidence)
+        except (TypeError, ValueError):
+            confidence = 0.0
+        sub_intent = payload.get("sub_intent")
+        return {
+            "intent": intent,
+            "confidence": round(max(0.0, min(confidence, 1.0)), 2),
+            "sentiment": sentiment,
+            "entities": entities,
+            "sub_intent": sub_intent,
+        }
 
 
 def get_recent_user_responses(limit: int = 10) -> List[Dict[str, Any]]:
